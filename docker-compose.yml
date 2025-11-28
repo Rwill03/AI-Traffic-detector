@@ -1,0 +1,28 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16
+    container_name: traffic_db
+    environment:
+      POSTGRES_DB: traffic_db
+      POSTGRES_USER: traffic_user
+      POSTGRES_PASSWORD: supersecretpassword
+    volumes:
+      - traffic_db_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./VM-side
+    container_name: traffic_api
+    environment:
+      DATABASE_URL: postgresql+psycopg2://traffic_user:supersecretpassword@db/traffic_db
+    depends_on:
+      - db
+    ports:
+      - "8001:8001"
+    restart: unless-stopped
+
+volumes:
+  traffic_db_data:

@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import List
+import os
 
 from fastapi import FastAPI, Depends
 from pydantic import BaseModel, Field
@@ -12,7 +13,8 @@ from sqlalchemy import (
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 
 # ===== DB setup =====
-DATABASE_URL = "postgresql+psycopg2://traffic_user:supersecretpassword@localhost/traffic_db"
+#DATABASE_URL = "postgresql+psycopg2://traffic_user:supersecretpassword@localhost/traffic_db"
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg2://traffic_user:supersecretpassword@localhost/traffic_db",)
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
