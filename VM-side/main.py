@@ -193,8 +193,13 @@ async def create_observation(
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON in 'payload' field")
 
-    ts = parse_ts(data.get("ts"))
+    # prefer nested breakdown; fall back to legacy top-level keys if present
+    ts_raw = data.get("ts") or data.get("timestamp")
+    ts = parse_ts(ts_raw)
     breakdown = data.get("breakdown") or {}
+    for key in ("car", "truck", "bus", "motorcycle", "bicycle"):
+        if key not in breakdown and key in data:
+            breakdown[key] = data[key]
 
     # snapshot opslaan (indien aanwezig)
     snapshot_rel_url: str | None = None
