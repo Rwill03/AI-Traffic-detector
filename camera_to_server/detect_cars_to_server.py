@@ -1,191 +1,292 @@
+import os
 import time
-import base64
-from datetime import datetime, timezone
+import json
+import uuid
+import datetime as dt
+from pathlib import Path
 
 import cv2
-import torch
+import numpy as np
 import requests
-
 from rfdetr import RFDETRBase
-from rfdetr.util.coco_classes import COCO_CLASSES
+
+# =========================
+# CONFIG
+# =========================
+
+CAMERA_DEVICE = "/dev/video1"  # device in Docker: /dev/video1
+SAMPLE_EVERY_SECONDS = 10.0
+
+VM_API_URL = "http://100.89.11.82:8001/api/v1/observations"  # FastAPI endpoint
+
+CAMERA_ID = "rock5-camera-1"
+
+SNAPSHOT_DIR = Path("/app/snapshots")  # in container
+SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
 
 
-# ===== CONFIG =====
-CAMERA_DEVICE = "/dev/video1"          # of /dev/video0 als dat je device is
-SAMPLE_INTERVAL_SEC = 10.0
+# =========================
+# MODEL LOADING
+# =========================
 
-SERVER_URL = "http://100.89.11.82:8001/api/v1/observations"
-
-CONF_THRESHOLD = 0.30
-VEHICLE_CLASSES = ["car", "truck", "bus", "motorcycle", "bicycle"]
-
-
-def load_model() -> RFDETRBase:
+def load_model(device: str = "cpu") -> RFDETRBase:
     """
-    RF-DETR model laden met COCO pretrain weights.
-    Zorg dat rf-detr-base.pth in dezelfde map staat als dit script.
+    Load RF-DETR model once, on CPU.
+    We use default pretrained weights from the library.
     """
-    print("Loading RF-DETR (RFDETRBase) model on CPU...")
-    # Als jouw checkpoint anders heet, pas dit pad aan:
-    model = RFDETRBase(pretrain_weights="rf-detr-base.pth")
-    # Optioneel kun je dit doen als je performance wil tunen:
-    # model.optimize_for_inference()
-    print("Model loaded.")
+    print(f"Loading RF-DETR (RFDETRBase) model on {device}...", flush=True)
+    model = RFDETRBase()
+    # De lib laadt zelf weights; we log gewoon.
+    print("Loading pretrain weights", flush=True)
+    # Sommige versies doen init al in __init__, maar dit is veilig.
+    # Als dit niets doet, ook goed.
+    try:
+        model.load_pretrain_weights()
+        print("Pretrained weights loaded via load_pretrain_weights().", flush=True)
+    except Exception as e:
+        # Als deze methode niet bestaat, gewoon verder met default weights
+        print(f"load_pretrain_weights() not available or failed ({e}), using default model weights.", flush=True)
+
+    print("Model loaded (RFDETRBase, default weights).", flush=True)
     return model
 
 
-def count_and_annotate(frame_bgr, model: RFDETRBase):
+# =========================
+# DETECTION → COUNTS / BOXES
+# =========================
+
+def count_vehicles_and_boxes(detections) -> tuple[int, dict, list, list]:
     """
-    Run RF-DETR op het frame, tel voertuigen en teken kaders + labels.
-
-    Returns:
-      total_vehicles (int),
-      counts (dict),
-      annotated_frame_bgr (np.ndarray)
+    Neemt RF-DETR 'detections' object en telt voertuigen.
+    Returned:
+        total_vehicles (int),
+        breakdown (dict),
+        boxes (list of [x1,y1,x2,y2]),
+        labels (list of str)
     """
-    # RF-DETR werkt prima met een RGB image (np array)
-    img_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+    breakdown = {
+        "car": 0,
+        "truck": 0,
+        "bus": 0,
+        "motorcycle": 0,
+        "bicycle": 0,
+    }
 
-    # model.predict kan direct op numpy array / image
-    detections = model.predict(img_rgb, threshold=CONF_THRESHOLD)
+    # mapping COCO-class-id -> onze labels
+    # COCO (standaard):
+    # 1: person, 2: bicycle, 3: car, 4: motorcycle, 6: bus, 8: truck, ...
+    id2label = {
+        2: "bicycle",
+        3: "car",
+        4: "motorcycle",
+        6: "bus",
+        8: "truck",
+    }
 
-    xyxy = detections.xyxy            # [N, 4]
-    class_ids = detections.class_id   # [N]
-    scores = detections.confidence    # [N]
+    boxes_out = []
+    labels_out = []
 
-    counts = {k: 0 for k in VEHICLE_CLASSES}
-    total_vehicles = 0
+    # Als detections geen expected attrs heeft → geen voertuigen
+    if detections is None:
+        return 0, breakdown, boxes_out, labels_out
 
-    annotated = frame_bgr.copy()
+    class_ids = getattr(detections, "class_id", None)
+    boxes = getattr(detections, "xyxy", None)
 
-    for box, cid, score in zip(xyxy, class_ids, scores):
-        score = float(score)
-        class_idx = int(cid)
+    if class_ids is None or boxes is None:
+        return 0, breakdown, boxes_out, labels_out
 
-        # COCO label-naam ophalen
-        if class_idx < 0 or class_idx >= len(COCO_CLASSES):
+    # class_ids en boxes zijn typisch np.array of lijst
+    # Zorg dat we erover kunnen itereren
+    if hasattr(class_ids, "tolist"):
+        class_ids = class_ids.tolist()
+    if hasattr(boxes, "tolist"):
+        boxes = boxes.tolist()
+
+    for i, cid in enumerate(class_ids):
+        try:
+            cid_int = int(cid)
+        except Exception:
             continue
-        cls_name = COCO_CLASSES[class_idx].lower()
 
-        if cls_name not in VEHICLE_CLASSES:
-            continue
+        label = id2label.get(cid_int)
+        if label is None:
+            continue  # skip classes die ons niet boeien
 
-        total_vehicles += 1
-        counts[cls_name] += 1
+        breakdown[label] += 1
 
-        x1, y1, x2, y2 = map(int, box)
+        if i < len(boxes):
+            box = boxes[i]
+            if len(box) == 4:
+                boxes_out.append(box)
+                labels_out.append(label)
 
-        # Rode box
-        color = (0, 0, 255)  # BGR: rood
-        cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
+    total_vehicles = sum(breakdown.values())
+    return total_vehicles, breakdown, boxes_out, labels_out
 
-        label = f"{cls_name} {score:.2f}"
-        text_org = (x1, max(y1 - 5, 10))
+
+# =========================
+# SNAPSHOT ANNOTATION
+# =========================
+
+def draw_boxes_on_frame(frame: np.ndarray, boxes: list, labels: list) -> np.ndarray:
+    """
+    Tekent simpele bounding boxes + label op het frame.
+    """
+    annotated = frame.copy()
+    for (box, label) in zip(boxes, labels):
+        x1, y1, x2, y2 = box
+        x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+
+        cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 255, 0), 2)
         cv2.putText(
             annotated,
             label,
-            text_org,
+            (x1, max(0, y1 - 5)),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.4,
-            color,
-            1,
+            0.6,
+            (0, 255, 0),
+            2,
             cv2.LINE_AA,
         )
+    return annotated
 
-    return total_vehicles, counts, annotated
 
-
-def frame_to_base64_jpeg(frame_bgr):
+def save_snapshot(frame: np.ndarray, boxes: list, labels: list) -> Path:
     """
-    Converteer een BGR-frame naar JPEG en dan naar base64 string.
+    Slaat elke 10s een snapshot op (met boxes getekend).
+    Returnt het pad in de container.
     """
+    annotated = draw_boxes_on_frame(frame, boxes, labels)
+
+    ts_str = dt.datetime.utcnow().strftime("%Y%m%dT%H%M%S")
+    uid = uuid.uuid4().hex[:6]
+    filename = f"snapshot_{ts_str}_{uid}.jpg"
+    out_path = SNAPSHOT_DIR / filename
+
+    ok = cv2.imwrite(str(out_path), annotated)
+    if not ok:
+        print(f"⚠️ Failed to write snapshot to {out_path}", flush=True)
+    else:
+        print(f"📸 Saved snapshot: {out_path}", flush=True)
+
+    return out_path
+
+
+# =========================
+# API CALL
+# =========================
+
+def post_observation(total_vehicles: int, breakdown: dict, snapshot_path: Path | None):
+    """
+    Stuurt payload + optioneel snapshot naar de VM API.
+    Snapshot wordt *niet* in SQL opgeslagen; alleen de path op de VM
+    wordt daar bijgehouden (server-side).
+    """
+    now_iso = dt.datetime.utcnow().isoformat() + "Z"
+
+    payload = {
+        "camera_id": CAMERA_ID,
+        "total_vehicles": int(total_vehicles),
+        "car": int(breakdown.get("car", 0)),
+        "truck": int(breakdown.get("truck", 0)),
+        "bus": int(breakdown.get("bus", 0)),
+        "motorcycle": int(breakdown.get("motorcycle", 0)),
+        "bicycle": int(breakdown.get("bicycle", 0)),
+        "timestamp": now_iso,
+    }
+
+    files = {}
+    data = {"payload": json.dumps(payload)}
+
+    if snapshot_path is not None and snapshot_path.exists():
+        files["snapshot"] = (
+            snapshot_path.name,
+            open(snapshot_path, "rb"),
+            "image/jpeg",
+        )
+
     try:
-        ok, buf = cv2.imencode(".jpg", frame_bgr)
-        if not ok:
-            return None
-        b64 = base64.b64encode(buf.tobytes()).decode("utf-8")
-        return b64
-    except Exception:
-        return None
+        resp = requests.post(VM_API_URL, data=data, files=files, timeout=5)
+        print(f"POST status: {resp.status_code}", flush=True)
+        if resp.status_code >= 400:
+            print(f"Response body: {resp.text}", flush=True)
+    except Exception as e:
+        print(f"POST failed: {e}", flush=True)
+    finally:
+        # file handle clean
+        if "snapshot" in files:
+            files["snapshot"][1].close()
 
+
+# =========================
+# MAIN LOOP
+# =========================
 
 def main():
-    # Model op CPU laden
-    model = load_model()
+    device = "cpu"
+    model = load_model(device=device)
 
-    # Camera openen met expliciet V4L2-backend
-    print(f"Opening camera {CAMERA_DEVICE} with V4L2 backend...")
+    print(f"Opening camera {CAMERA_DEVICE} with V4L2 backend...", flush=True)
     cap = cv2.VideoCapture(CAMERA_DEVICE, cv2.CAP_V4L2)
 
-    # Match settings die ffmpeg liet zien: YUY2, 1280x960, 5 fps
-    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"YUY2"))
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 960)
-    cap.set(cv2.CAP_PROP_FPS, 5)
-
-    print("VideoCapture opened:", cap.isOpened())
-    if not cap.isOpened():
-        print(f"❌ Could not open camera device {CAMERA_DEVICE} (inside Docker)")
+    if not cap or not cap.isOpened():
+        print(f"❌ Failed to open camera {CAMERA_DEVICE}", flush=True)
         return
 
     print(
-        f"Starting headless vehicle counting on {CAMERA_DEVICE}, "
-        f"every {SAMPLE_INTERVAL_SEC} seconds..."
+        f"✅ VideoCapture opened: True\nStarting headless vehicle counting on {CAMERA_DEVICE}, every {SAMPLE_EVERY_SECONDS} seconds...",
+        flush=True,
     )
+
+    last_sample_ts = 0.0
+    sample_idx = 0
 
     try:
         while True:
-            # Frame lezen
             ret, frame = cap.read()
-            print("cap.read() ret:", ret)  # extra debug
-            if not ret:
-                print("⚠️ Failed to read frame from camera, retrying in 2s...")
+            if not ret or frame is None:
+                print("⚠️ Failed to read frame from camera, retrying in 2s...", flush=True)
                 time.sleep(2.0)
                 continue
 
-            # Timestamp in UTC
-            now = datetime.now(timezone.utc)
-            now_iso = now.isoformat()
+            now = time.time()
+            if now - last_sample_ts < SAMPLE_EVERY_SECONDS:
+                # Niet elke frame loggen; gewoon een short sleep
+                time.sleep(0.05)
+                continue
 
-            # Detectie + annotatie
-            total_vehicles, counts, annotated_frame = count_and_annotate(frame, model)
+            last_sample_ts = now
+            sample_idx += 1
 
-            # Annotated frame → JPEG → base64
-            frame_b64 = frame_to_base64_jpeg(annotated_frame)
+            # Inference
+            try:
+                # BELANGRIJK: RFDETRBase is niet callable, gebruik predict()
+                prediction = model.predict(frame)
+            except Exception as e:
+                print(f"Model.predict(frame) failed: {e}", flush=True)
+                continue
 
-            # JSON-payload richting VM API
-            payload = {
-                "timestamp": now_iso,
-                "total_vehicles": int(total_vehicles),
-                "car": int(counts.get("car", 0)),
-                "truck": int(counts.get("truck", 0)),
-                "bus": int(counts.get("bus", 0)),
-                "motorcycle": int(counts.get("motorcycle", 0)),
-                "bicycle": int(counts.get("bicycle", 0)),
-                "camera_id": "rock5-1",
-                "frame_jpeg_b64": frame_b64,
-            }
+            total_vehicles, breakdown, boxes, labels = count_vehicles_and_boxes(prediction)
 
+            ts_iso = dt.datetime.utcnow().isoformat() + "+00:00"
             print(
-                f"{now_iso}  total_vehicles={total_vehicles}  breakdown={counts}"
+                f"{ts_iso}  sample={sample_idx}  total_vehicles={total_vehicles}  breakdown={breakdown}",
+                flush=True,
             )
 
-            # POST naar server
-            try:
-                resp = requests.post(SERVER_URL, json=payload, timeout=2)
-                print(f"POST status: {resp.status_code}")
-                if resp.status_code >= 400:
-                    print(f"Response body: {resp.text}")
-            except Exception as e:
-                print(f"POST failed: {e}")
+            # Snapshot opslaan (altijd, om de 10s)
+            snapshot_path = save_snapshot(frame, boxes, labels)
 
-            # Wachten tot volgende sample
-            time.sleep(SAMPLE_INTERVAL_SEC)
+            # Naar VM sturen
+            post_observation(total_vehicles, breakdown, snapshot_path)
 
     except KeyboardInterrupt:
-        print("Camera released, exiting.")
+        print("👋 Interrupted by user, shutting down...", flush=True)
     finally:
         cap.release()
+        print("Camera released, exiting.", flush=True)
+
 
 if __name__ == "__main__":
     main()
