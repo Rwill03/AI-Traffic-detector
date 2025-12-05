@@ -1,31 +1,28 @@
 import os
-import pathlib
-from datetime import datetime, timezone
-from typing import Optional, List, Literal
+import json
+import uuid
+from datetime import datetime, timezone, timedelta
+from pathlib import Path
 
-from fastapi import FastAPI, Depends, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Depends, HTTPException, Form, File, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ConfigDict
+from fastapi.responses import FileResponse
 
-from sqlalchemy import (
-    create_engine,
-    Column,
-    Integer,
-    String,
-    DateTime,
-)
-from sqlalchemy.orm import sessionmaker, Session, declarative_base
+from sqlalchemy import create_engine, Column, Integer, String, DateTime
+from sqlalchemy.orm import sessionmaker, declarative_base, Session
+from sqlalchemy.exc import OperationalError
 
+# === Paths & DB setup ===
 
-# ---------------------------------------------------------------------------
-# Config & DB setup
-# ---------------------------------------------------------------------------
+BASE_DIR = Path(__file__).resolve().parent
+STATIC_DIR = BASE_DIR / "static"
+SNAPSHOT_DIR = STATIC_DIR / "snapshots"
+SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    # Default voor in Docker (host: traffic_db) – kan via env worden override'd
-    "postgresql+psycopg2://traffic_user:supersecretpassword@traffic_db/traffic_db",
+    "postgresql+psycopg2://traffic_user:supersecretpassword@db/traffic_db",
 )
 
 engine = create_engine(DATABASE_URL, future=True)
@@ -38,6 +35,7 @@ class TrafficSample(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     ts = Column(DateTime(timezone=True), index=True, nullable=False)
+    camera_id = Column(String, nullable=True)
 
     total_vehicles = Column(Integer, nullable=False, default=0)
     car = Column(Integer, nullable=False, default=0)
@@ -46,14 +44,14 @@ class TrafficSample(Base):
     motorcycle = Column(Integer, nullable=False, default=0)
     bicycle = Column(Integer, nullable=False, default=0)
 
-    # Je houdt camera_id – ok, 1 camera maar future-proof
-    camera_id = Column(String, nullable=True)
+    # nieuw: pad naar snapshot (relative URL, bv. "/static/snapshots/xxx.jpg")
+    snapshot_path = Column(String, nullable=True)
 
 
 Base.metadata.create_all(bind=engine)
 
 
-def get_db():
+def get_db() -> Session:
     db = SessionLocal()
     try:
         yield db
@@ -61,145 +59,180 @@ def get_db():
         db.close()
 
 
-# ---------------------------------------------------------------------------
-# Pydantic models
-# ---------------------------------------------------------------------------
-
-class ObservationIn(BaseModel):
-    timestamp: Optional[datetime] = None
-    total_vehicles: int
-    car: int = 0
-    truck: int = 0
-    bus: int = 0
-    motorcycle: int = 0
-    bicycle: int = 0
-    camera_id: Optional[str] = "rock5-1"
-
-
-class ObservationOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    ts: datetime
-    total_vehicles: int
-    car: int
-    truck: int
-    bus: int
-    motorcycle: int
-    bicycle: int
-    camera_id: Optional[str]
-
-
-class DashboardStatus(BaseModel):
-    vm_status: str
-    db_status: str
-    rock5_status: Literal["online", "lagging", "offline"]
-    server_time: datetime
-    sample_age_seconds: Optional[float]
-    last_observations: List[ObservationOut]
-
-
-# ---------------------------------------------------------------------------
-# FastAPI app + static mounting
-# ---------------------------------------------------------------------------
+# === FastAPI app ===
 
 app = FastAPI(title="Traffic Counter API (1 camera)")
 
-BASE_DIR = pathlib.Path(__file__).parent
-
-# static/ folder (voor dashboard.html)
-app.mount(
-    "/static",
-    StaticFiles(directory=str(BASE_DIR / "static")),
-    name="static",
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # dev-friendly
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-
-@app.get("/dashboard", response_class=HTMLResponse)
-def dashboard_page():
-    """Serve de futuristic dashboard UI."""
-    index_file = BASE_DIR / "static" / "dashboard.html"
-    if not index_file.exists():
-        raise HTTPException(status_code=404, detail="dashboard.html not found")
-    return index_file.read_text(encoding="utf-8")
+# static + dashboard
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
-# ---------------------------------------------------------------------------
-# API: Rock5 → POST observaties
-# ---------------------------------------------------------------------------
-
-@app.post("/api/v1/observations", response_model=ObservationOut)
-def create_observation(payload: ObservationIn, db: Session = Depends(get_db)):
-    # timestamp van de Rock5 of fallback naar server-tijd (UTC)
-    if payload.timestamp is None:
-        ts = datetime.now(timezone.utc)
-    else:
-        ts = payload.timestamp
-        if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=timezone.utc)
-
-    row = TrafficSample(
-        ts=ts,
-        total_vehicles=payload.total_vehicles,
-        car=payload.car,
-        truck=payload.truck,
-        bus=payload.bus,
-        motorcycle=payload.motorcycle,
-        bicycle=payload.bicycle,
-        camera_id=payload.camera_id,
-    )
-    db.add(row)
-    db.commit()
-    db.refresh(row)
-    return row
+@app.get("/")
+def read_root():
+    dashboard = STATIC_DIR / "dashboard.html"
+    if not dashboard.exists():
+        raise HTTPException(500, detail="dashboard.html not found")
+    return FileResponse(str(dashboard))
 
 
-# ---------------------------------------------------------------------------
-# API: Status + laatste 10 metingen
-# ---------------------------------------------------------------------------
-
-ROCK5_OFFLINE_THRESHOLD_SEC = 120  # >2 min geen nieuwe sample = offline
+# === Helpers ===
 
 
-@app.get("/api/v1/status", response_model=DashboardStatus)
-def get_status(db: Session = Depends(get_db)):
-    rows: List[TrafficSample] = (
-        db.query(TrafficSample)
-        .order_by(TrafficSample.ts.desc())
-        .limit(10)
-        .all()
-    )
+def parse_ts(value: str | None) -> datetime:
+    if not value:
+        return datetime.now(timezone.utc)
+    try:
+        dt = datetime.fromisoformat(value)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except ValueError:
+        return datetime.now(timezone.utc)
 
+
+def sample_to_dict(s: TrafficSample) -> dict:
+    return {
+        "id": s.id,
+        "ts": s.ts.isoformat(),
+        "camera_id": s.camera_id,
+        "total_vehicles": s.total_vehicles,
+        "car": s.car,
+        "truck": s.truck,
+        "bus": s.bus,
+        "motorcycle": s.motorcycle,
+        "bicycle": s.bicycle,
+        "snapshot_url": s.snapshot_path,  # front-end verwacht dit veld
+    }
+
+
+def compute_rock5_status(latest: TrafficSample | None) -> tuple[str, float | None]:
+    if latest is None:
+        return "offline", None
     now = datetime.now(timezone.utc)
+    age = (now - latest.ts).total_seconds()
 
-    if rows:
-        last_ts = rows[0].ts
-        if last_ts.tzinfo is None:
-            last_ts = last_ts.replace(tzinfo=timezone.utc)
-        age_sec: Optional[float] = (now - last_ts).total_seconds()
+    # zelfde logica als vroeger: < 30s = online, < 120s = lagging, anders offline
+    if age < 30:
+        return "online", age
+    elif age < 120:
+        return "lagging", age
     else:
-        last_ts = None
-        age_sec = None
+        return "offline", age
 
-    # Rock5 status op basis van leeftijd laatste sample
-    if last_ts is None:
-        rock5_status: Literal["online", "lagging", "offline"] = "offline"
-    else:
-        if age_sec < 30:
-            rock5_status = "online"
-        elif age_sec < ROCK5_OFFLINE_THRESHOLD_SEC:
-            rock5_status = "lagging"
-        else:
-            rock5_status = "offline"
 
-    vm_status = "online"
-    db_status = "online"
+# === API endpoints ===
 
-    return DashboardStatus(
-        vm_status=vm_status,
-        db_status=db_status,
-        rock5_status=rock5_status,
-        server_time=now,
-        sample_age_seconds=age_sec,
-        last_observations=rows,
+
+@app.get("/api/v1/status")
+def get_status(db: Session = Depends(get_db)):
+    server_time = datetime.now(timezone.utc)
+
+    try:
+        # laatste 10 samples voor de tabel
+        samples = (
+            db.query(TrafficSample)
+            .order_by(TrafficSample.ts.desc())
+            .limit(10)
+            .all()
+        )
+        last = samples[0] if samples else None
+
+        rock5_status, age = compute_rock5_status(last)
+        vm_status = "online"
+        db_status = "ok"
+    except OperationalError:
+        samples = []
+        rock5_status = "offline"
+        age = None
+        vm_status = "degraded"
+        db_status = "error"
+
+    return {
+        "server_time": server_time.isoformat(),
+        "rock5_status": rock5_status,
+        "vm_status": vm_status,
+        "db_status": db_status,
+        "sample_age_seconds": age,
+        "last_observations": [sample_to_dict(s) for s in samples],
+    }
+
+
+@app.post("/api/v1/observations")
+async def create_observation(
+    # Let op: multipart/form-data
+    payload: str = Form(...),
+    snapshot: UploadFile | None = File(None),
+    db: Session = Depends(get_db),
+):
+    """
+    Verwacht:
+      - payload (Form field, JSON string):
+          {
+            "ts": "...",            # optioneel, ISO
+            "camera_id": "rock5-1", # optioneel
+            "total_vehicles": 4,
+            "breakdown": {
+              "car": 3,
+              "truck": 1,
+              ...
+            }
+          }
+      - snapshot (optional file): JPEG/PNG met boxes
+    """
+
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON in 'payload' field")
+
+    ts = parse_ts(data.get("ts"))
+    breakdown = data.get("breakdown") or {}
+
+    # snapshot opslaan (indien aanwezig)
+    snapshot_rel_url: str | None = None
+    if snapshot is not None:
+        # bepaal extensie
+        orig_name = snapshot.filename or "snapshot.jpg"
+        ext = Path(orig_name).suffix.lower()
+        if not ext:
+            ext = ".jpg"
+
+        filename = f"{int(ts.timestamp() * 1000)}_{uuid.uuid4().hex}{ext}"
+        out_path = SNAPSHOT_DIR / filename
+
+        content = await snapshot.read()
+        with out_path.open("wb") as f:
+            f.write(content)
+
+        # relative URL
+        snapshot_rel_url = f"/static/snapshots/{filename}"
+
+    sample = TrafficSample(
+        ts=ts,
+        camera_id=data.get("camera_id"),
+        total_vehicles=int(data.get("total_vehicles") or 0),
+        car=int(breakdown.get("car") or 0),
+        truck=int(breakdown.get("truck") or 0),
+        bus=int(breakdown.get("bus") or 0),
+        motorcycle=int(breakdown.get("motorcycle") or 0),
+        bicycle=int(breakdown.get("bicycle") or 0),
+        snapshot_path=snapshot_rel_url,
     )
+
+    db.add(sample)
+    db.commit()
+    db.refresh(sample)
+
+    return {
+        "ok": True,
+        "id": sample.id,
+        "snapshot_url": snapshot_rel_url,
+    }
