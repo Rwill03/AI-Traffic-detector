@@ -23,6 +23,17 @@ services:
     ports:
       - "8001:8001"
     restart: unless-stopped
+    volumes:
+      - model_data:/app/transformer_model/saved_models
+    # GPU support
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 
 volumes:
   traffic_db_data:
+  model_data:

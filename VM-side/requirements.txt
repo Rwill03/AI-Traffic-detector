@@ -4,3 +4,8 @@ sqlalchemy
 psycopg2-binary
 pydantic
 python-multipart
+
+# Transformer model dependencies
+numpy
+pandas
+scikit-learn

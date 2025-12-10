@@ -1,10 +1,11 @@
 import os
 import json
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date
 from pathlib import Path
+from typing import Optional
 
-from fastapi import FastAPI, Depends, HTTPException, Form, File, UploadFile
+from fastapi import FastAPI, Depends, HTTPException, Form, File, UploadFile, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -12,6 +13,9 @@ from fastapi.responses import FileResponse
 from sqlalchemy import create_engine, Column, Integer, String, DateTime
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
 from sqlalchemy.exc import OperationalError
+
+# Import predictor (lazy loading)
+from transformer_model.predict import get_predictor, predict_next_24_hours, predict_for_date
 
 # === Paths & DB setup ===
 
@@ -240,4 +244,118 @@ async def create_observation(
         "ok": True,
         "id": sample.id,
         "snapshot_url": snapshot_rel_url,
+    }
+
+
+# === Simple observation endpoint (for debug data generator) ===
+
+@app.post("/api/v1/observation")
+async def create_simple_observation(
+    data: dict,
+    db: Session = Depends(get_db),
+):
+    """
+    Simplified observation endpoint voor het debug data generator script.
+    Verwacht een JSON body met ts, camera_id, total_vehicles, car, truck, bus, motorcycle, bicycle.
+    """
+    ts = parse_ts(data.get("ts"))
+    
+    sample = TrafficSample(
+        ts=ts,
+        camera_id=data.get("camera_id"),
+        total_vehicles=int(data.get("total_vehicles") or 0),
+        car=int(data.get("car") or 0),
+        truck=int(data.get("truck") or 0),
+        bus=int(data.get("bus") or 0),
+        motorcycle=int(data.get("motorcycle") or 0),
+        bicycle=int(data.get("bicycle") or 0),
+        snapshot_path=None,
+    )
+
+    db.add(sample)
+    db.commit()
+    db.refresh(sample)
+
+    return {"ok": True, "id": sample.id}
+
+
+# === Prediction API endpoints ===
+
+@app.get("/api/v1/predictions")
+def get_predictions(
+    date: Optional[str] = Query(None, description="Date in YYYY-MM-DD format"),
+):
+    """
+    Haal voorspellingen op voor de volgende 24 uur of voor een specifieke datum.
+    
+    Args:
+        date: Optionele datum in YYYY-MM-DD formaat
+        
+    Returns:
+        Dict met predictions en summary
+    """
+    predictor = get_predictor()
+    
+    if date:
+        try:
+            target_date = datetime.strptime(date, "%Y-%m-%d")
+            predictions = predict_for_date(target_date)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+    else:
+        predictions = predict_next_24_hours()
+    
+    summary = predictor.get_daily_summary(predictions)
+    
+    return {
+        "predictions": predictions,
+        "summary": summary,
+        "model_ready": predictor.is_ready(),
+        "generated_at": datetime.now(timezone.utc).isoformat()
+    }
+
+
+@app.get("/api/v1/predictions/current")
+def get_current_prediction():
+    """
+    Haal de voorspelling voor het huidige uur op.
+    """
+    predictor = get_predictor()
+    current = predictor.get_current_hour_prediction()
+    
+    if current is None:
+        raise HTTPException(status_code=500, detail="Could not generate prediction")
+    
+    return {
+        "current_hour": current,
+        "model_ready": predictor.is_ready(),
+        "generated_at": datetime.now(timezone.utc).isoformat()
+    }
+
+
+@app.get("/api/v1/predictions/week")
+def get_week_predictions():
+    """
+    Haal voorspellingen op voor de komende 7 dagen.
+    """
+    predictor = get_predictor()
+    today = datetime.now()
+    
+    week_predictions = []
+    for i in range(7):
+        target_date = today + timedelta(days=i)
+        predictions = predict_for_date(target_date)
+        summary = predictor.get_daily_summary(predictions)
+        
+        week_predictions.append({
+            "date": target_date.strftime("%Y-%m-%d"),
+            "day_name": target_date.strftime("%A"),
+            "predictions": predictions,
+            "summary": summary
+        })
+    
+    return {
+        "week_predictions": week_predictions,
+        "model_ready": predictor.is_ready(),
+        "generated_at": datetime.now(timezone.utc).isoformat()
     }
