@@ -91,12 +91,22 @@ def read_root():
 
 
 def parse_ts(value: str | None) -> datetime:
+    """Parse timestamp, gebruik server tijd als de timestamp in de toekomst ligt."""
+    now = datetime.now(timezone.utc)
+    
     if not value:
-        return datetime.now(timezone.utc)
+        return now
+    
     try:
         dt = datetime.fromisoformat(value)
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
+        
+        # Als timestamp meer dan 1 minuut in de toekomst ligt, gebruik server tijd
+        if dt > now + timedelta(minutes=1):
+            print(f"Warning: Camera timestamp {dt} is in the future, using server time instead")
+            return now
+        
         return dt
     except ValueError:
         return datetime.now(timezone.utc)
