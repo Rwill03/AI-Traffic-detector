@@ -68,6 +68,11 @@ train_model(epochs=100, verbose=True)
 ```bash
 docker compose exec api python3 "Evaluation model/evaluate_model.py"
 ```
+- Hoe het werkt:
+  - Data split: laatste 20% uurdata is validatie, met minimaal één volledige sequence van 24u input + 24u target voor zowel train als val.
+  - Metrics: MAE (gemiddelde absolute fout) en RMSE (wortel van kwadratische fout) in echte auto-aantallen; sMAPE als percentage (stabieler bij lage aantallen); per-uur MAE voor inzicht in specifieke uren.
+  - Training: verlies is SmoothL1/Huber (mix van MAE/MSE; dempt uitschieters), optimizer is Adam (adaptieve lr) met weight decay; beste val-loss bewaart `best_model.pth` via early stopping + LR scheduler.
+  - Pipelines: scaler wordt hergebruikt, model wordt geladen uit `best_model.pth` (beste val-loss tijdens training), validatieset wordt door het model gehaald, vervolgens worden metrics berekend en in het dashboard getoond via `/api/v1/model/metrics`.
 
 Training parameters kunnen aangepast worden in `transformer_model/config.py`:
 - `epochs`: Aantal training epochs (default: 100)
