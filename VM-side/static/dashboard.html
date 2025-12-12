@@ -1,0 +1,1780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Traffic Ops Console</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg-gradient: radial-gradient(circle at top, #1d2b64 0, #090b1a 45%, #02030a 100%);
+      --card-bg: rgba(15, 23, 42, 0.85);
+      --border-glass: rgba(148, 163, 184, 0.3);
+      --accent: #4f46e5;
+      --accent-soft: rgba(79, 70, 229, 0.35);
+      --accent-neon: #22d3ee;
+      --danger: #f97373;
+      --warn: #fbbf24;
+      --ok: #22c55e;
+      --text-main: #e5e7eb;
+      --text-muted: #9ca3af;
+      --radius-xl: 24px;
+      --shadow-soft: 0 24px 60px rgba(0,0,0,0.65);
+      --blur: 22px;
+      --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      min-height: 100vh;
+      background: var(--bg-gradient);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 16px;
+      transition: background 0.5s ease, color 0.4s ease;
+    }
+
+    body.state-lagging {
+      background: var(--bg-page);
+    }
+
+    body.state-lagging .frame {
+      border-color: rgba(251, 191, 36, 0.7);
+      box-shadow: 0 24px 60px rgba(202, 138, 4, 0.7);
+    }
+
+    .frame {
+      width: 100%;
+      max-width: 1400px;
+      border-radius: 32px;
+      padding: 28px 32px 32px;
+      background: linear-gradient(135deg, rgba(15,23,42,0.95), rgba(15,23,42,0.7));
+      box-shadow: var(--shadow-soft);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.4s ease, box-shadow 0.4s ease;
+    }
+
+    .frame::before,
+    .frame::after {
+      content: "";
+      position: absolute;
+      border-radius: 999px;
+      filter: blur(40px);
+      opacity: 0.6;
+      pointer-events: none;
+    }
+
+    .frame::before {
+      width: 260px;
+      height: 260px;
+      background: radial-gradient(circle, var(--accent-neon), transparent 70%);
+      top: -80px;
+      right: -40px;
+    }
+
+    .frame::after {
+      width: 220px;
+      height: 220px;
+      background: radial-gradient(circle, var(--accent-soft), transparent 70%);
+      bottom: -80px;
+      left: -60px;
+    }
+
+    .header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 24px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .title {
+      font-size: 28px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .title span.logo-dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 999px;
+      background: radial-gradient(circle, var(--accent-neon), transparent 60%);
+      box-shadow: 0 0 18px rgba(34, 211, 238, 0.9);
+    }
+
+    .subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+    }
+
+    .meta {
+      text-align: right;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .meta span {
+      display: block;
+    }
+
+    /* Tab Navigation */
+    .tab-nav {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .tab-btn {
+      padding: 10px 24px;
+      border-radius: 999px;
+      border: 1px solid rgba(148,163,184,0.4);
+      background: rgba(15,23,42,0.8);
+      color: var(--text-muted);
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .tab-btn:hover {
+      background: rgba(79,70,229,0.2);
+      border-color: rgba(79,70,229,0.5);
+    }
+
+    .tab-btn.active {
+      background: linear-gradient(135deg, var(--accent), #6366f1);
+      border-color: var(--accent);
+      color: white;
+      box-shadow: 0 4px 20px rgba(79,70,229,0.4);
+    }
+
+    .tab-content {
+      display: none;
+      position: relative;
+      z-index: 1;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(0, 3fr) minmax(0, 1.6fr);
+      gap: 20px;
+    }
+
+    @media (max-width: 880px) {
+      .grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .meta {
+        text-align: left;
+      }
+    }
+
+    .card {
+      background: linear-gradient(145deg, rgba(15,23,42,0.98), rgba(15,23,42,0.72));
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--border-glass);
+      box-shadow: 0 18px 50px rgba(0,0,0,0.6);
+      padding: 18px 18px 16px;
+      backdrop-filter: blur(var(--blur));
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at top left, rgba(148,163,184,0.12), transparent 40%);
+      opacity: 0.85;
+      pointer-events: none;
+    }
+
+    .card-inner {
+      position: relative;
+      z-index: 1;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      gap: 8px;
+    }
+
+    .card-title {
+      font-size: 15px;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+    }
+
+    .card-tag {
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(148,163,184,0.45);
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      background: radial-gradient(circle, rgba(15,23,42,0.9), rgba(15,23,42,0.6));
+    }
+
+    .obs-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin-top: 6px;
+    }
+
+    .obs-table thead {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: var(--text-muted);
+    }
+
+    .obs-table th,
+    .obs-table td {
+      padding: 6px 4px;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    .obs-table th:nth-child(2),
+    .obs-table td:nth-child(2) {
+      text-align: right;
+    }
+
+    .obs-table tbody tr {
+      border-top: 1px solid rgba(31,41,55,0.9);
+    }
+
+    .obs-table tbody tr:first-child {
+      border-top: none;
+    }
+
+    .obs-table tbody tr.highlight {
+      background: radial-gradient(circle at left, rgba(79,70,229,0.22), transparent 55%);
+    }
+
+    .tag-row {
+      display: flex;
+      justify-content: flex-end;
+      gap: 4px;
+      font-size: 10px;
+    }
+
+    .vehicle-chip {
+      padding: 2px 7px;
+      border-radius: 999px;
+      border: 1px solid rgba(148,163,184,0.45);
+      color: var(--text-muted);
+      backdrop-filter: blur(12px);
+      background: radial-gradient(circle, rgba(15,23,42,0.9), rgba(15,23,42,0.4));
+    }
+
+    .vehicle-chip strong {
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .status-grid {
+      display: grid;
+      grid-template-columns: minmax(0,1fr);
+      gap: 10px;
+      margin-top: 6px;
+    }
+
+    .status-block {
+      border-radius: 18px;
+      padding: 10px 11px;
+      border: 1px solid rgba(148,163,184,0.5);
+      background: radial-gradient(circle at top left, rgba(15,23,42,0.98), rgba(15,23,42,0.72));
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .status-label {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: var(--text-muted);
+    }
+
+    .status-main {
+      font-size: 13px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      box-shadow: 0 0 16px rgba(34,197,94,0.85);
+      background: var(--ok);
+      transition: background 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .dot.warn {
+      background: var(--warn);
+      box-shadow: 0 0 16px rgba(251,191,36,0.9);
+    }
+
+    .dot.danger {
+      background: var(--danger);
+      box-shadow: 0 0 16px rgba(248,113,113,0.9);
+    }
+
+    .status-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-align: right;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(148,163,184,0.5);
+      background: radial-gradient(circle, rgba(15,23,42,0.95), rgba(15,23,42,0.6));
+    }
+
+    .pill-key {
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+    }
+
+    .pill-value {
+      font-variant-numeric: tabular-nums;
+      color: var(--text-main);
+    }
+
+    .pill-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--accent-neon);
+      box-shadow: 0 0 10px rgba(34,211,238,0.9);
+    }
+
+    .footer {
+      margin-top: 14px;
+      font-size: 11px;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .snapshot-btn {
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(148,163,184,0.5);
+      background: radial-gradient(circle, rgba(15,23,42,0.95), rgba(15,23,42,0.6));
+      color: var(--text-main);
+      cursor: pointer;
+      transition: background 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+    }
+
+    .snapshot-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 20px rgba(15,23,42,0.8);
+    }
+
+    .snapshot-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15,23,42,0.85);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+    }
+
+    .snapshot-overlay.hidden {
+      display: none;
+    }
+
+    .snapshot-modal {
+      max-width: 90vw;
+      max-height: 90vh;
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.85);
+      border: 1px solid rgba(148,163,184,0.6);
+      background: #020617;
+    }
+
+    .snapshot-modal img {
+      display: block;
+      max-width: 100%;
+      height: auto;
+    }
+
+    /* Predictions Tab Styles */
+    .predictions-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+      gap: 20px;
+    }
+
+    @media (max-width: 1000px) {
+      .predictions-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .current-prediction {
+      text-align: center;
+      padding: 24px;
+    }
+
+    .current-hour-label {
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .current-hour-value {
+      font-size: 72px;
+      font-weight: 700;
+      color: var(--text-main);
+      line-height: 1;
+    }
+
+    .current-hour-unit {
+      font-size: 18px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .rush-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 12px;
+      padding: 6px 16px;
+      border-radius: 999px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .rush-indicator.rush {
+      background: #f3f4f6;
+      border: 1px solid var(--border);
+      color: var(--text-main);
+    }
+
+    .rush-indicator.normal {
+      background: #f3f4f6;
+      border: 1px solid var(--border);
+      color: var(--text-main);
+    }
+
+    .chart-container {
+      position: relative;
+      height: 280px;
+      margin-top: 16px;
+    }
+
+    .day-selector {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    .day-btn {
+      padding: 8px 16px;
+      border-radius: 12px;
+      border: 1px solid rgba(148,163,184,0.4);
+      background: var(--accent);
+      color: #ffffff;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .day-btn:hover {
+      background: #111827;
+      border-color: #111827;
+    }
+
+    .day-btn.active {
+      background: #111827;
+      border-color: #111827;
+      color: #ffffff;
+    }
+
+    .summary-stats {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .stat-item {
+      background: var(--accent);
+      border-radius: 12px;
+      padding: 12px;
+      border: 1px solid #111827;
+    }
+
+    .stat-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      color: #ffffff;
+      margin-bottom: 4px;
+    }
+
+    .stat-value {
+      font-size: 20px;
+      font-weight: 600;
+      color: #ffffff;
+    }
+
+    .stat-value.highlight {
+      color: #ffffff;
+    }
+
+    .prediction-list {
+      max-height: 400px;
+      overflow-y: auto;
+      margin-top: 12px;
+    }
+
+    .prediction-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      border-radius: 8px;
+      margin-bottom: 4px;
+      background: rgba(15,23,42,0.4);
+      border: 1px solid transparent;
+      transition: all 0.15s ease;
+    }
+
+    .prediction-item:hover {
+      background: rgba(79,70,229,0.15);
+      border-color: rgba(79,70,229,0.3);
+    }
+
+    .prediction-item.current {
+      background: rgba(34,211,238,0.15);
+      border-color: rgba(34,211,238,0.4);
+    }
+
+    .prediction-item.rush-hour {
+      border-left: 3px solid #f97316;
+    }
+
+    .prediction-hour {
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .prediction-value {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--accent-neon);
+    }
+
+    .model-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 11px;
+      margin-top: 12px;
+    }
+
+    .model-status.ready {
+      background: rgba(34, 197, 94, 0.15);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      color: #4ade80;
+    }
+
+    .model-status.dummy {
+      background: rgba(251, 191, 36, 0.15);
+      border: 1px solid rgba(251, 191, 36, 0.3);
+      color: #fbbf24;
+    }
+
+    /* === Tailscale-inspired light theme overrides === */
+    :root {
+      --bg-page: #f9fafb;
+      --bg-alt: #f3f4f6;
+      --card-bg: #ffffff;
+      --border: #e5e7eb;
+      --text-main: #111827;
+      --text-muted: #6b7280;
+      --accent: #1f2937;
+      --accent-strong: #111827;
+      --accent-neon: #374151;
+      --radius-xl: 20px;
+      --shadow-soft: 0 12px 30px rgba(17, 24, 39, 0.08);
+    }
+
+    body {
+      background: var(--bg-page);
+      color: var(--text-main);
+      align-items: flex-start;
+      padding: 48px 16px;
+    }
+
+    body.state-lagging {
+      background: #fff7ed;
+    }
+
+    .frame {
+      max-width: 1160px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-soft);
+      padding: 32px;
+      border-radius: 24px;
+      overflow: visible;
+    }
+
+    .frame::before,
+    .frame::after {
+      display: none;
+    }
+
+    .header {
+      align-items: flex-start;
+      margin-bottom: 32px;
+    }
+
+    .title {
+      font-size: 34px;
+      letter-spacing: 0;
+      text-transform: none;
+      color: var(--text-main);
+      gap: 12px;
+    }
+
+    .title span.logo-dot {
+      width: 12px;
+      height: 12px;
+      background: var(--accent);
+      box-shadow: 0 0 0 6px rgba(17, 24, 39, 0.12);
+    }
+
+    .subtitle {
+      font-size: 15px;
+      letter-spacing: 0;
+      text-transform: none;
+      color: var(--text-muted);
+      margin-top: 6px;
+    }
+
+    .meta {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .tab-nav {
+      margin-bottom: 24px;
+    }
+
+    .tab-btn {
+      padding: 10px 18px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: #ffffff;
+      color: var(--text-muted);
+      font-size: 13px;
+      letter-spacing: 0;
+      text-transform: none;
+      box-shadow: 0 4px 10px rgba(17,24,39,0.05);
+    }
+
+    .tab-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: #f5f6f7;
+    }
+
+    .tab-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #ffffff;
+      box-shadow: 0 8px 18px rgba(17,24,39,0.15);
+    }
+
+    .grid {
+      gap: 24px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-soft);
+      border-radius: var(--radius-xl);
+      padding: 20px 22px 18px;
+      backdrop-filter: none;
+    }
+
+    .card::before {
+      display: none;
+    }
+
+    .card-title {
+      font-size: 16px;
+      letter-spacing: 0;
+      text-transform: none;
+      color: var(--text-main);
+    }
+
+    .card-tag {
+      border: 1px solid var(--border);
+      color: var(--accent);
+      background: #f3f4f6;
+      text-transform: none;
+      letter-spacing: 0;
+      font-weight: 600;
+    }
+
+    .obs-table thead {
+      color: var(--text-muted);
+      letter-spacing: 0;
+      text-transform: none;
+      font-size: 12px;
+    }
+
+    .obs-table tbody tr {
+      border-top: 1px solid var(--border);
+    }
+
+    .obs-table tbody tr.highlight {
+      background: #f5f6f7;
+    }
+
+    .vehicle-chip {
+      border: 1px solid var(--border);
+      background: #f8fafc;
+      color: var(--text-muted);
+    }
+
+    .vehicle-chip strong {
+      color: var(--text-main);
+    }
+
+    .status-block {
+      border: 1px solid var(--border);
+      background: #f8fafc;
+      box-shadow: none;
+    }
+
+    .status-label {
+      letter-spacing: 0;
+      text-transform: none;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    .status-main {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .dot {
+      box-shadow: none;
+    }
+
+    .pill {
+      border: 1px solid var(--border);
+      background: #f8fafc;
+    }
+
+    .pill-key {
+      letter-spacing: 0;
+      text-transform: none;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    .pill-value {
+      color: var(--text-main);
+      font-weight: 600;
+    }
+
+    .snap-btn,
+    .snapshot-btn,
+    .prediction-item,
+    .model-status,
+    .aggregates,
+    .prediction-meta .badge,
+    .selector button,
+    .chart-card,
+    .week-card,
+    .prediction-list {
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: #ffffff;
+      box-shadow: 0 6px 14px rgba(17,24,39,0.06);
+    }
+
+    .snapshot-btn,
+    .selector button,
+    .prediction-item {
+      border-radius: 999px;
+      box-shadow: none;
+    }
+
+    .snap-btn,
+    .selector button {
+      border: 1px solid var(--border);
+      background: #ffffff;
+      color: var(--text-main);
+    }
+
+    .snap-btn:hover,
+    .selector button:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: #f5f6f7;
+    }
+
+    .snapshot-overlay {
+      background: rgba(17, 24, 39, 0.55);
+    }
+
+    .snapshot-modal {
+      background: #ffffff;
+      border-radius: 20px;
+      box-shadow: 0 20px 40px rgba(17,24,39,0.25);
+      padding: 20px;
+    }
+
+    .chart-card canvas {
+      background: #ffffff;
+    }
+
+    .prediction-value {
+      color: var(--accent-strong);
+    }
+
+    .prediction-item.rush-hour {
+      border-left: 3px solid var(--accent-strong);
+      background: #f5f6f7;
+    }
+
+    .model-status.ready {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      color: var(--text-main);
+    }
+
+    .model-status.dummy {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      color: var(--text-main);
+    }
+
+    .prediction-meta .badge {
+      background: #f3f4f6;
+      color: var(--accent-strong);
+      border: 1px solid var(--border);
+    }
+
+    .eval-block {
+      margin-top: 18px;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: #ffffff;
+      box-shadow: 0 10px 20px rgba(17,24,39,0.05);
+    }
+
+    .eval-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .eval-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .eval-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .eval-chip {
+      border-radius: 12px;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      background: #f8fafc;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+    }
+
+    .eval-chip .label {
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 11px;
+    }
+
+    .eval-chip .value {
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .has-tip {
+      position: relative;
+      cursor: help;
+    }
+
+    .has-tip::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      left: 0;
+      bottom: 120%;
+      width: 220px;
+      padding: 8px 10px;
+      font-size: 11px;
+      line-height: 1.4;
+      color: var(--text-main);
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      box-shadow: 0 8px 18px rgba(17,24,39,0.12);
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(4px);
+      transition: all 0.15s ease;
+      z-index: 5;
+      pointer-events: none;
+    }
+
+    .has-tip:hover::after {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+    }
+
+    .eval-meta {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .eval-chart {
+      height: 140px;
+    }
+
+    .chart-header h2,
+    .week-card h3,
+    .section-title {
+      color: var(--text-main);
+      letter-spacing: 0;
+      text-transform: none;
+    }
+
+    .week-card h3 {
+      font-size: 16px;
+    }
+
+    .prediction-meta .pill {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+    }
+
+    .dot.danger { box-shadow: none; }
+    .dot.warn { box-shadow: none; }
+
+    .tab-content,
+    .card,
+    .chart-card,
+    .week-card,
+    .prediction-list,
+    .status-block,
+    .pill,
+    .vehicle-chip,
+    .prediction-item {
+      transition: all 0.15s ease;
+    }
+
+    .card:hover,
+    .chart-card:hover,
+    .week-card:hover,
+    .prediction-item:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 24px rgba(17,24,39,0.08);
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    input, select, button {
+      font-family: inherit;
+    }
+
+    input, select {
+      border: 1px solid #d1d5db;
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: #ffffff;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    input:focus, select:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(14,165,233,0.2);
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <div class="header">
+      <div>
+        <div class="title">
+          <span class="logo-dot"></span>
+          Traffic Ops Console
+        </div>
+        <div class="subtitle">Realtime edge → cloud telemetry</div>
+      </div>
+      <div class="meta">
+        <span id="server-time">Server: –</span>
+        <span id="last-refresh">Last refresh: –</span>
+      </div>
+    </div>
+
+    <!-- Tab Navigation -->
+    <div class="tab-nav">
+      <button class="tab-btn active" data-tab="monitoring">Monitoring</button>
+      <button class="tab-btn" data-tab="predictions">Predictions</button>
+    </div>
+
+    <!-- Monitoring Tab -->
+    <div id="tab-monitoring" class="tab-content active">
+      <div class="grid">
+        <div class="card">
+          <div class="card-inner">
+            <div class="card-header">
+              <div class="card-title">Last 10 observations</div>
+              <div class="card-tag">camera · rock5</div>
+            </div>
+
+            <table class="obs-table">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Total</th>
+                  <th>Split</th>
+                  <th>Snapshot</th>
+                </tr>
+              </thead>
+              <tbody id="obs-body">
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-inner">
+            <div class="card-header">
+              <div class="card-title">System status</div>
+              <div class="card-tag">edge · backend · db</div>
+            </div>
+
+            <div class="status-grid">
+              <div class="status-block" id="rock5-block">
+                <div>
+                  <div class="status-label">Edge node</div>
+                  <div class="status-main">
+                    <span id="rock5-dot" class="dot"></span>
+                    <span>Rock5 camera pipeline</span>
+                  </div>
+                </div>
+                <div class="status-meta">
+                  <div class="pill">
+                    <span class="pill-key">State</span>
+                    <span class="pill-value" id="rock5-state">–</span>
+                    <span class="pill-dot"></span>
+                  </div>
+                  <div>Δt sample: <span id="sample-age">–</span>s</div>
+                </div>
+              </div>
+
+              <div class="status-block" id="vm-block">
+                <div>
+                  <div class="status-label">Core API</div>
+                  <div class="status-main">
+                    <span id="vm-dot" class="dot"></span>
+                    <span>FastAPI service</span>
+                  </div>
+                </div>
+                <div class="status-meta">
+                  <div class="pill">
+                    <span class="pill-key">State</span>
+                    <span class="pill-value" id="vm-state">–</span>
+                    <span class="pill-dot"></span>
+                  </div>
+                  <div>DB: <span id="db-state">–</span></div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Predictions Tab -->
+    <div id="tab-predictions" class="tab-content">
+      <div class="predictions-grid">
+        <div class="card">
+          <div class="card-inner">
+            <div class="card-header">
+              <div class="card-title">Traffic Forecast</div>
+              <div class="card-tag">AI Transformer</div>
+            </div>
+
+            <!-- Day Selector -->
+            <div class="day-selector" id="day-selector">
+              <!-- Populated by JS -->
+            </div>
+
+            <!-- Chart -->
+            <div class="chart-container">
+              <canvas id="prediction-chart"></canvas>
+            </div>
+
+            <!-- Evaluation metrics -->
+            <div class="eval-block">
+              <div class="eval-header">
+                <div class="eval-title">Model evaluation</div>
+                <div class="card-tag">validation</div>
+              </div>
+              <div class="eval-stats">
+                <div class="eval-chip has-tip" data-tooltip="MAE (Mean Absolute Error): gemiddelde absolute afwijking; lager is beter.">
+                  <span class="label">MAE</span>
+                  <span class="value" id="eval-mae">--</span>
+                </div>
+                <div class="eval-chip has-tip" data-tooltip="RMSE (Root Mean Squared Error): straft uitschieters zwaarder dan MAE; lager is beter.">
+                  <span class="label">RMSE</span>
+                  <span class="value" id="eval-rmse">--</span>
+                </div>
+                <div class="eval-chip has-tip" data-tooltip="sMAPE: schaal-invariant percentagefout; stabieler bij lage volumes.">
+                  <span class="label">sMAPE</span>
+                  <span class="value" id="eval-smape">--</span>
+                </div>
+                <div class="eval-chip has-tip" data-tooltip="Aantal validatie-sequenties (24u vensters) waarop metrics zijn berekend.">
+                  <span class="label">Val seq</span>
+                  <span class="value" id="eval-seq">--</span>
+                </div>
+              </div>
+              <div class="eval-meta" id="eval-meta">Waiting for metrics…</div>
+              <div class="eval-chart">
+                <canvas id="eval-chart"></canvas>
+              </div>
+            </div>
+
+            <!-- Model Status -->
+            <div id="model-status" class="model-status dummy">
+              <span class="dot"></span>
+              <span>Checking model status...</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-inner">
+            <div class="card-header">
+              <div class="card-title">Current Hour</div>
+              <div class="card-tag">live</div>
+            </div>
+
+            <div class="current-prediction">
+              <div class="current-hour-label">Predicted vehicles</div>
+              <div class="current-hour-value" id="current-prediction-value">--</div>
+              <div class="current-hour-unit">cars this hour</div>
+              <div id="rush-indicator" class="rush-indicator normal">
+                <span class="dot"></span>
+                <span>Normal traffic</span>
+              </div>
+            </div>
+
+            <!-- Summary Stats -->
+            <div class="summary-stats">
+              <div class="stat-item">
+                <div class="stat-label">Peak Hour</div>
+                <div class="stat-value" id="peak-hour">--:00</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-label">Peak Cars</div>
+                <div class="stat-value highlight" id="peak-cars">--</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-label">Daily Total</div>
+                <div class="stat-value" id="daily-total">--</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-label">Rush Hour Avg</div>
+                <div class="stat-value" id="rush-avg">--</div>
+              </div>
+            </div>
+
+            <!-- Hourly List -->
+            <div class="prediction-list" id="prediction-list">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <span>Sampling: 10s · auto-refresh every 5s</span>
+      <span id="status-msg">Awaiting first update…</span>
+    </div>
+  </div>
+
+  <!-- Snapshot modal -->
+  <div id="snapshot-overlay" class="snapshot-overlay hidden">
+    <div class="snapshot-modal">
+      <img id="snapshot-img" src="" alt="Snapshot" />
+    </div>
+  </div>
+
+  <script>
+    const API_URL = "/api/v1/status";
+    const PREDICTIONS_URL = "/api/v1/predictions";
+    const METRICS_URL = "/api/v1/model/metrics";
+
+    let predictionChart = null;
+    let evalChart = null;
+    let selectedDate = new Date().toISOString().split('T')[0];
+
+    // Tab switching
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        
+        btn.classList.add('active');
+        document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+
+        if (btn.dataset.tab === 'predictions') {
+          loadPredictions();
+          loadMetrics();
+        }
+      });
+    });
+
+    function statusToDotClass(status) {
+      if (!status) return "dot danger";
+      const s = status.toLowerCase();
+      if (s === "online") return "dot";
+      if (s === "lagging") return "dot warn";
+      return "dot danger";
+    }
+
+    function formatTs(iso) {
+      if (!iso) return "–";
+      try {
+        const d = new Date(iso);
+        return d.toLocaleString(undefined, {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        });
+      } catch {
+        return iso;
+      }
+    }
+
+    function setBodyState(rock5Status, isError) {
+      document.body.classList.remove("state-lagging", "state-offline");
+
+      if (isError) {
+        document.body.classList.add("state-offline");
+        return;
+      }
+
+      if (!rock5Status) return;
+
+      const s = rock5Status.toLowerCase();
+      if (s === "lagging") {
+        document.body.classList.add("state-lagging");
+      } else if (s === "offline") {
+        document.body.classList.add("state-offline");
+      }
+    }
+
+    async function refresh() {
+      const statusMsg = document.getElementById("status-msg");
+      try {
+        const resp = await fetch(API_URL, { cache: "no-store" });
+        if (!resp.ok) {
+          statusMsg.textContent = "API error: " + resp.status;
+          setBodyState(null, true);
+          return;
+        }
+        const data = await resp.json();
+
+        document.getElementById("server-time").textContent =
+          "Server: " + formatTs(data.server_time);
+        document.getElementById("last-refresh").textContent =
+          "Last refresh: " + formatTs(new Date().toISOString());
+
+        const rock5StatusRaw = data.rock5_status || "unknown";
+        const rock5State = rock5StatusRaw.toUpperCase();
+        const vmState = (data.vm_status || "unknown").toUpperCase();
+        const dbState = (data.db_status || "unknown").toUpperCase();
+
+        document.getElementById("rock5-state").textContent = rock5State;
+        document.getElementById("vm-state").textContent = vmState;
+        document.getElementById("db-state").textContent = dbState;
+        document.getElementById("sample-age").textContent =
+          data.sample_age_seconds != null
+            ? Math.round(data.sample_age_seconds)
+            : "–";
+
+        const rock5Dot = document.getElementById("rock5-dot");
+        const vmDot = document.getElementById("vm-dot");
+
+        rock5Dot.className = statusToDotClass(rock5StatusRaw);
+        vmDot.className = statusToDotClass(data.vm_status);
+
+        setBodyState(rock5StatusRaw, false);
+
+        const bodyEl = document.getElementById("obs-body");
+        bodyEl.innerHTML = "";
+
+        const obs = data.last_observations || [];
+
+        if (obs.length === 0) {
+          const row = document.createElement("tr");
+          const td = document.createElement("td");
+          td.colSpan = 4;
+          td.textContent = "No samples received yet.";
+          td.style.color = "#9ca3af";
+          td.style.paddingTop = "10px";
+          row.appendChild(td);
+          bodyEl.appendChild(row);
+        } else {
+          obs.forEach((o, idx) => {
+            const tr = document.createElement("tr");
+            if (idx === 0) tr.classList.add("highlight");
+
+            const tdTs = document.createElement("td");
+            tdTs.textContent = formatTs(o.ts);
+
+            const tdTotal = document.createElement("td");
+            const total = o.total_vehicles ?? 0;
+            tdTotal.textContent = `${total} voertuigen`;
+
+            const tdSplit = document.createElement("td");
+            const wrapper = document.createElement("div");
+            wrapper.className = "tag-row";
+
+            const keys = ["car", "truck", "bus", "motorcycle", "bicycle"];
+            keys.forEach((k) => {
+              const v = o[k] ?? 0;
+              if (v > 0) {
+                const chip = document.createElement("div");
+                chip.className = "vehicle-chip";
+                chip.innerHTML = `<strong>${v}</strong> ${k}`;
+                wrapper.appendChild(chip);
+              }
+            });
+
+            if (!wrapper.childNodes.length) {
+              wrapper.textContent = "–";
+            }
+            tdSplit.appendChild(wrapper);
+
+            const tdSnap = document.createElement("td");
+            if (o.snapshot_url) {
+              const btn = document.createElement("button");
+              btn.className = "snapshot-btn";
+              btn.textContent = "View";
+              btn.dataset.url = o.snapshot_url;
+              tdSnap.appendChild(btn);
+            } else {
+              tdSnap.textContent = "–";
+            }
+
+            tr.appendChild(tdTs);
+            tr.appendChild(tdTotal);
+            tr.appendChild(tdSplit);
+            tr.appendChild(tdSnap);
+
+            bodyEl.appendChild(tr);
+          });
+        }
+
+        statusMsg.textContent = "Live link OK · polling /api/v1/status";
+      } catch (err) {
+        console.error(err);
+        statusMsg.textContent = "Connection issue – retrying…";
+        setBodyState(null, true);
+      }
+    }
+
+    // Predictions functionality
+    function fmt(value, digits = 2) {
+      if (value === null || value === undefined || isNaN(value)) return "--";
+      return Number(value).toFixed(digits);
+    }
+
+    function initDaySelector() {
+      const selector = document.getElementById('day-selector');
+      selector.innerHTML = '';
+      
+      const today = new Date();
+      for (let i = 0; i < 7; i++) {
+        const date = new Date(today);
+        date.setDate(date.getDate() + i);
+        
+        const btn = document.createElement('button');
+        btn.className = 'day-btn' + (i === 0 ? ' active' : '');
+        btn.dataset.date = date.toISOString().split('T')[0];
+        
+        if (i === 0) {
+          btn.textContent = 'Today';
+        } else if (i === 1) {
+          btn.textContent = 'Tomorrow';
+        } else {
+          btn.textContent = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+        }
+        
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.day-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          selectedDate = btn.dataset.date;
+          loadPredictions();
+        });
+        
+        selector.appendChild(btn);
+      }
+    }
+
+    async function loadPredictions() {
+      try {
+        const resp = await fetch(`${PREDICTIONS_URL}?date=${selectedDate}`, { cache: "no-store" });
+        if (!resp.ok) {
+          console.error('Predictions API error:', resp.status);
+          return;
+        }
+        
+        const data = await resp.json();
+        updatePredictionUI(data);
+      } catch (err) {
+        console.error('Error loading predictions:', err);
+      }
+    }
+
+    function updatePredictionUI(data) {
+      const predictions = data.predictions || [];
+      const summary = data.summary || {};
+      const modelReady = data.model_ready;
+      
+      // Update model status
+      const modelStatus = document.getElementById('model-status');
+      if (modelReady) {
+        modelStatus.className = 'model-status ready';
+        modelStatus.innerHTML = '<span class="dot"></span><span>Transformer model active</span>';
+      } else {
+        modelStatus.className = 'model-status dummy';
+        modelStatus.innerHTML = '<span class="dot warn"></span><span>Using simulated predictions (model not trained)</span>';
+      }
+      
+      // Update current prediction
+      const currentHour = new Date().getHours();
+      const currentPred = predictions.find(p => p.hour_of_day === currentHour) || predictions[0];
+      
+      if (currentPred) {
+        document.getElementById('current-prediction-value').textContent = currentPred.predicted_cars;
+        
+        const rushIndicator = document.getElementById('rush-indicator');
+        if (currentPred.is_rush_hour) {
+          rushIndicator.className = 'rush-indicator rush';
+          rushIndicator.innerHTML = '<span class="dot warn"></span><span>Rush hour traffic</span>';
+        } else {
+          rushIndicator.className = 'rush-indicator normal';
+          rushIndicator.innerHTML = '<span class="dot"></span><span>Normal traffic</span>';
+        }
+      }
+      
+      // Update summary stats
+      if (summary.peak_hour) {
+        const peakHour = summary.peak_hour.split(' ')[1] || summary.peak_hour;
+        document.getElementById('peak-hour').textContent = peakHour;
+      }
+      document.getElementById('peak-cars').textContent = summary.peak_cars || '--';
+      document.getElementById('daily-total').textContent = summary.total_predicted || '--';
+      document.getElementById('rush-avg').textContent = summary.rush_hour_average || '--';
+      
+      // Update chart
+      updateChart(predictions);
+      
+      // Update prediction list
+      updatePredictionList(predictions, currentHour);
+    }
+
+    function updateChart(predictions) {
+      const ctx = document.getElementById('prediction-chart').getContext('2d');
+      
+      const labels = predictions.map(p => {
+        const hour = p.hour_of_day;
+        return `${hour.toString().padStart(2, '0')}:00`;
+      });
+      
+      const values = predictions.map(p => p.predicted_cars);
+      const rushHours = predictions.map(p => p.is_rush_hour);
+      
+      const backgroundColors = rushHours.map(isRush => 
+        isRush ? 'rgba(55, 65, 81, 0.55)' : 'rgba(107, 114, 128, 0.35)'
+      );
+      
+      const borderColors = rushHours.map(isRush => 
+        isRush ? 'rgba(31, 41, 55, 0.9)' : 'rgba(75, 85, 99, 0.8)'
+      );
+      
+      if (predictionChart) {
+        predictionChart.destroy();
+      }
+      
+      predictionChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Predicted Cars',
+            data: values,
+            backgroundColor: backgroundColors,
+            borderColor: borderColors,
+            borderWidth: 1,
+            borderRadius: 4,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: false
+            },
+            tooltip: {
+              backgroundColor: '#ffffff',
+              titleColor: '#111827',
+              bodyColor: '#111827',
+              borderColor: '#e5e7eb',
+              borderWidth: 1,
+              callbacks: {
+                label: function(context) {
+                  const isRush = rushHours[context.dataIndex];
+                  return `${context.parsed.y} cars${isRush ? ' (rush hour)' : ''}`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: {
+                color: 'rgba(148, 163, 184, 0.1)'
+              },
+              ticks: {
+                color: '#9ca3af',
+                font: { size: 10 }
+              }
+            },
+            y: {
+              grid: {
+                color: 'rgba(148, 163, 184, 0.1)'
+              },
+              ticks: {
+                color: '#9ca3af',
+                font: { size: 10 }
+              },
+              beginAtZero: true
+            }
+          }
+        }
+      });
+    }
+
+    function updatePredictionList(predictions, currentHour) {
+      const list = document.getElementById('prediction-list');
+      list.innerHTML = '';
+      
+      predictions.forEach(pred => {
+        const item = document.createElement('div');
+        item.className = 'prediction-item';
+        
+        if (pred.hour_of_day === currentHour) {
+          item.classList.add('current');
+        }
+        if (pred.is_rush_hour) {
+          item.classList.add('rush-hour');
+        }
+        
+        const hourStr = pred.hour_of_day.toString().padStart(2, '0') + ':00';
+        
+        item.innerHTML = `
+          <span class="prediction-hour">${hourStr}</span>
+          <span class="prediction-value">${pred.predicted_cars} cars</span>
+        `;
+        
+        list.appendChild(item);
+      });
+    }
+
+    async function loadMetrics() {
+      const meta = document.getElementById('eval-meta');
+      meta.textContent = "Loading metrics…";
+      try {
+        const resp = await fetch(METRICS_URL, { cache: "no-store" });
+        if (!resp.ok) {
+          meta.textContent = "Geen metrics beschikbaar";
+          return;
+        }
+        const data = await resp.json();
+        document.getElementById('eval-mae').textContent = fmt(data.mae);
+        document.getElementById('eval-rmse').textContent = fmt(data.rmse);
+        document.getElementById('eval-smape').textContent = fmt(data.smape);
+        document.getElementById('eval-seq').textContent = data.sequences ?? "--";
+        meta.textContent = `Validatie op ${data.sequences ?? "–"} sequences · ${data.samples ?? "–"} samples`;
+        renderEvalChart(data.per_hour_mae || []);
+      } catch (e) {
+        console.error("Error loading metrics", e);
+        meta.textContent = "Kon metrics niet ophalen";
+      }
+    }
+
+    function renderEvalChart(values) {
+      const ctx = document.getElementById('eval-chart').getContext('2d');
+      const labels = Array.from({ length: values.length || 24 }, (_, i) =>
+        i.toString().padStart(2, '0') + ':00'
+      );
+      const dataVals = values.length ? values : Array.from({ length: labels.length }, () => 0);
+
+      if (evalChart) evalChart.destroy();
+
+      evalChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'MAE per hour',
+            data: dataVals,
+            borderColor: '#1f2937',
+            backgroundColor: 'rgba(79, 70, 229, 0.12)',
+            fill: true,
+            tension: 0.3,
+            pointRadius: 0,
+            borderWidth: 2,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: {
+              ticks: { color: '#6b7280', font: { size: 9 } },
+              grid: { display: false },
+            },
+            y: {
+              ticks: { color: '#6b7280', font: { size: 10 } },
+              grid: { color: 'rgba(148, 163, 184, 0.2)' },
+              beginAtZero: true
+            }
+          }
+        }
+      });
+    }
+
+    // Snapshot modal logic
+    const overlay = document.getElementById("snapshot-overlay");
+    const overlayImg = document.getElementById("snapshot-img");
+    const obsBody = document.getElementById("obs-body");
+
+    obsBody.addEventListener("click", (e) => {
+      const btn = e.target.closest(".snapshot-btn");
+      if (!btn) return;
+      const url = btn.dataset.url;
+      if (!url) return;
+      overlayImg.src = url;
+      overlay.classList.remove("hidden");
+    });
+
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) {
+        overlay.classList.add("hidden");
+        overlayImg.src = "";
+      }
+    });
+
+    // Initialize
+    initDaySelector();
+    refresh();
+    setInterval(refresh, 5000);
+  </script>
+</body>
+</html>
