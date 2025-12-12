@@ -43,11 +43,11 @@
     }
 
     body.state-lagging {
-      background: radial-gradient(circle at top, #f97316 0, #7c2d12 45%, #1b0a02 100%);
+      background: var(--bg-page);
     }
 
     body.state-offline {
-      background: radial-gradient(circle at top, #7f1d1d 0, #450a0a 45%, #120202 100%);
+      background: var(--bg-page);
     }
 
     body.state-offline .frame {
@@ -489,10 +489,7 @@
     .current-hour-value {
       font-size: 72px;
       font-weight: 700;
-      background: linear-gradient(135deg, var(--accent-neon), var(--accent));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
+      color: var(--text-main);
       line-height: 1;
     }
 
@@ -515,15 +512,15 @@
     }
 
     .rush-indicator.rush {
-      background: rgba(249, 115, 22, 0.2);
-      border: 1px solid rgba(249, 115, 22, 0.5);
-      color: #fb923c;
+      background: #f3f4f6;
+      border: 1px solid var(--border);
+      color: var(--text-main);
     }
 
     .rush-indicator.normal {
-      background: rgba(34, 197, 94, 0.2);
-      border: 1px solid rgba(34, 197, 94, 0.5);
-      color: #4ade80;
+      background: #f3f4f6;
+      border: 1px solid var(--border);
+      color: var(--text-main);
     }
 
     .chart-container {
@@ -543,22 +540,22 @@
       padding: 8px 16px;
       border-radius: 12px;
       border: 1px solid rgba(148,163,184,0.4);
-      background: rgba(15,23,42,0.8);
-      color: var(--text-muted);
+      background: var(--accent);
+      color: #ffffff;
       font-size: 12px;
       cursor: pointer;
       transition: all 0.2s ease;
     }
 
     .day-btn:hover {
-      background: rgba(79,70,229,0.2);
-      border-color: rgba(79,70,229,0.5);
+      background: #111827;
+      border-color: #111827;
     }
 
     .day-btn.active {
-      background: var(--accent);
-      border-color: var(--accent);
-      color: white;
+      background: #111827;
+      border-color: #111827;
+      color: #ffffff;
     }
 
     .summary-stats {
@@ -569,28 +566,28 @@
     }
 
     .stat-item {
-      background: rgba(15,23,42,0.6);
+      background: var(--accent);
       border-radius: 12px;
       padding: 12px;
-      border: 1px solid rgba(148,163,184,0.2);
+      border: 1px solid #111827;
     }
 
     .stat-label {
       font-size: 10px;
       text-transform: uppercase;
       letter-spacing: 0.15em;
-      color: var(--text-muted);
+      color: #ffffff;
       margin-bottom: 4px;
     }
 
     .stat-value {
       font-size: 20px;
       font-weight: 600;
-      color: var(--text-main);
+      color: #ffffff;
     }
 
     .stat-value.highlight {
-      color: var(--accent-neon);
+      color: #ffffff;
     }
 
     .prediction-list {
@@ -656,6 +653,351 @@
       background: rgba(251, 191, 36, 0.15);
       border: 1px solid rgba(251, 191, 36, 0.3);
       color: #fbbf24;
+    }
+
+    /* === Tailscale-inspired light theme overrides === */
+    :root {
+      --bg-page: #f9fafb;
+      --bg-alt: #f3f4f6;
+      --card-bg: #ffffff;
+      --border: #e5e7eb;
+      --text-main: #111827;
+      --text-muted: #6b7280;
+      --accent: #1f2937;
+      --accent-strong: #111827;
+      --accent-neon: #374151;
+      --radius-xl: 20px;
+      --shadow-soft: 0 12px 30px rgba(17, 24, 39, 0.08);
+    }
+
+    body {
+      background: var(--bg-page);
+      color: var(--text-main);
+      align-items: flex-start;
+      padding: 48px 16px;
+    }
+
+    body.state-lagging {
+      background: #fff7ed;
+    }
+
+    body.state-offline {
+      background: #fef2f2;
+    }
+
+    .frame {
+      max-width: 1160px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-soft);
+      padding: 32px;
+      border-radius: 24px;
+      overflow: visible;
+    }
+
+    .frame::before,
+    .frame::after {
+      display: none;
+    }
+
+    .header {
+      align-items: flex-start;
+      margin-bottom: 32px;
+    }
+
+    .title {
+      font-size: 34px;
+      letter-spacing: 0;
+      text-transform: none;
+      color: var(--text-main);
+      gap: 12px;
+    }
+
+    .title span.logo-dot {
+      width: 12px;
+      height: 12px;
+      background: var(--accent);
+      box-shadow: 0 0 0 6px rgba(17, 24, 39, 0.12);
+    }
+
+    .subtitle {
+      font-size: 15px;
+      letter-spacing: 0;
+      text-transform: none;
+      color: var(--text-muted);
+      margin-top: 6px;
+    }
+
+    .meta {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .tab-nav {
+      margin-bottom: 24px;
+    }
+
+    .tab-btn {
+      padding: 10px 18px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: #ffffff;
+      color: var(--text-muted);
+      font-size: 13px;
+      letter-spacing: 0;
+      text-transform: none;
+      box-shadow: 0 4px 10px rgba(17,24,39,0.05);
+    }
+
+    .tab-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: #f5f6f7;
+    }
+
+    .tab-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #ffffff;
+      box-shadow: 0 8px 18px rgba(17,24,39,0.15);
+    }
+
+    .grid {
+      gap: 24px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-soft);
+      border-radius: var(--radius-xl);
+      padding: 20px 22px 18px;
+      backdrop-filter: none;
+    }
+
+    .card::before {
+      display: none;
+    }
+
+    .card-title {
+      font-size: 16px;
+      letter-spacing: 0;
+      text-transform: none;
+      color: var(--text-main);
+    }
+
+    .card-tag {
+      border: 1px solid var(--border);
+      color: var(--accent);
+      background: #f3f4f6;
+      text-transform: none;
+      letter-spacing: 0;
+      font-weight: 600;
+    }
+
+    .obs-table thead {
+      color: var(--text-muted);
+      letter-spacing: 0;
+      text-transform: none;
+      font-size: 12px;
+    }
+
+    .obs-table tbody tr {
+      border-top: 1px solid var(--border);
+    }
+
+    .obs-table tbody tr.highlight {
+      background: #f5f6f7;
+    }
+
+    .vehicle-chip {
+      border: 1px solid var(--border);
+      background: #f8fafc;
+      color: var(--text-muted);
+    }
+
+    .vehicle-chip strong {
+      color: var(--text-main);
+    }
+
+    .status-block {
+      border: 1px solid var(--border);
+      background: #f8fafc;
+      box-shadow: none;
+    }
+
+    .status-label {
+      letter-spacing: 0;
+      text-transform: none;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    .status-main {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .dot {
+      box-shadow: none;
+    }
+
+    .pill {
+      border: 1px solid var(--border);
+      background: #f8fafc;
+    }
+
+    .pill-key {
+      letter-spacing: 0;
+      text-transform: none;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    .pill-value {
+      color: var(--text-main);
+      font-weight: 600;
+    }
+
+    .snap-btn,
+    .snapshot-btn,
+    .prediction-item,
+    .model-status,
+    .aggregates,
+    .prediction-meta .badge,
+    .selector button,
+    .chart-card,
+    .week-card,
+    .prediction-list {
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: #ffffff;
+      box-shadow: 0 6px 14px rgba(17,24,39,0.06);
+    }
+
+    .snapshot-btn,
+    .selector button,
+    .prediction-item {
+      border-radius: 999px;
+      box-shadow: none;
+    }
+
+    .snap-btn,
+    .selector button {
+      border: 1px solid var(--border);
+      background: #ffffff;
+      color: var(--text-main);
+    }
+
+    .snap-btn:hover,
+    .selector button:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: #f5f6f7;
+    }
+
+    .snapshot-overlay {
+      background: rgba(17, 24, 39, 0.55);
+    }
+
+    .snapshot-modal {
+      background: #ffffff;
+      border-radius: 20px;
+      box-shadow: 0 20px 40px rgba(17,24,39,0.25);
+      padding: 20px;
+    }
+
+    .chart-card canvas {
+      background: #ffffff;
+    }
+
+    .prediction-value {
+      color: var(--accent-strong);
+    }
+
+    .prediction-item.rush-hour {
+      border-left: 3px solid var(--accent-strong);
+      background: #f5f6f7;
+    }
+
+    .model-status.ready {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      color: var(--text-main);
+    }
+
+    .model-status.dummy {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      color: var(--text-main);
+    }
+
+    .prediction-meta .badge {
+      background: #f3f4f6;
+      color: var(--accent-strong);
+      border: 1px solid var(--border);
+    }
+
+    .chart-header h2,
+    .week-card h3,
+    .section-title {
+      color: var(--text-main);
+      letter-spacing: 0;
+      text-transform: none;
+    }
+
+    .week-card h3 {
+      font-size: 16px;
+    }
+
+    .prediction-meta .pill {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+    }
+
+    .dot.danger { box-shadow: none; }
+    .dot.warn { box-shadow: none; }
+
+    .tab-content,
+    .card,
+    .chart-card,
+    .week-card,
+    .prediction-list,
+    .status-block,
+    .pill,
+    .vehicle-chip,
+    .prediction-item {
+      transition: all 0.15s ease;
+    }
+
+    .card:hover,
+    .chart-card:hover,
+    .week-card:hover,
+    .prediction-item:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 24px rgba(17,24,39,0.08);
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    input, select, button {
+      font-family: inherit;
+    }
+
+    input, select {
+      border: 1px solid #d1d5db;
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: #ffffff;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    input:focus, select:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(14,165,233,0.2);
     }
   </style>
 </head>
@@ -1127,11 +1469,11 @@
       const rushHours = predictions.map(p => p.is_rush_hour);
       
       const backgroundColors = rushHours.map(isRush => 
-        isRush ? 'rgba(249, 115, 22, 0.6)' : 'rgba(34, 211, 238, 0.6)'
+        isRush ? 'rgba(55, 65, 81, 0.55)' : 'rgba(107, 114, 128, 0.35)'
       );
       
       const borderColors = rushHours.map(isRush => 
-        isRush ? 'rgba(249, 115, 22, 1)' : 'rgba(34, 211, 238, 1)'
+        isRush ? 'rgba(31, 41, 55, 0.9)' : 'rgba(75, 85, 99, 0.8)'
       );
       
       if (predictionChart) {
@@ -1159,10 +1501,10 @@
               display: false
             },
             tooltip: {
-              backgroundColor: 'rgba(15, 23, 42, 0.95)',
-              titleColor: '#e5e7eb',
-              bodyColor: '#e5e7eb',
-              borderColor: 'rgba(148, 163, 184, 0.5)',
+              backgroundColor: '#ffffff',
+              titleColor: '#111827',
+              bodyColor: '#111827',
+              borderColor: '#e5e7eb',
               borderWidth: 1,
               callbacks: {
                 label: function(context) {
