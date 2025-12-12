@@ -16,6 +16,12 @@ from sqlalchemy.exc import OperationalError
 
 # Import predictor (lazy loading)
 from transformer_model.predict import get_predictor, predict_next_24_hours, predict_for_date
+from transformer_model.config import BEST_MODEL_PATH, get_device
+from transformer_model.model import create_model
+from transformer_model.data_preprocessing import prepare_data, load_scaler
+import torch
+import numpy as np
+from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 # === Paths & DB setup ===
 
@@ -289,6 +295,74 @@ async def create_simple_observation(
     return {"ok": True, "id": sample.id}
 
 
+def evaluate_model_metrics():
+    """Bereken validatiemetrics voor het huidige model."""
+    try:
+        _, val_loader, scaler = prepare_data(reuse_scaler=True)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if val_loader is None:
+        raise HTTPException(status_code=400, detail="Geen validatieset beschikbaar")
+
+    if not os.path.exists(BEST_MODEL_PATH):
+        raise HTTPException(status_code=400, detail="Geen getraind model gevonden")
+
+    if scaler is None:
+        raise HTTPException(status_code=400, detail="Geen scaler gevonden")
+
+    device = get_device()
+    model = create_model(device)
+
+    checkpoint = torch.load(BEST_MODEL_PATH, map_location=device)
+    model.load_state_dict(checkpoint["model_state_dict"])
+    model.eval()
+
+    preds = []
+    targets = []
+
+    with torch.no_grad():
+        for src, tgt in val_loader:
+            src = src.to(device)
+            tgt = tgt.to(device)
+
+            out = model(src)
+            preds.append(out.cpu().numpy())
+            targets.append(tgt.cpu().numpy())
+
+    preds = np.concatenate(preds, axis=0)
+    targets = np.concatenate(targets, axis=0)
+
+    preds_unscaled = scaler.inverse_transform(preds.reshape(-1, 1)).reshape(preds.shape)
+    targets_unscaled = scaler.inverse_transform(targets.reshape(-1, 1)).reshape(targets.shape)
+
+    mae = float(mean_absolute_error(targets_unscaled.flatten(), preds_unscaled.flatten()))
+    mse = mean_squared_error(targets_unscaled.flatten(), preds_unscaled.flatten())
+    rmse = float(np.sqrt(mse))
+
+    # sMAPE is stabieler bij lage waarden
+    smape = float(
+        np.mean(
+            np.abs(preds_unscaled - targets_unscaled)
+            / (np.abs(preds_unscaled) + np.abs(targets_unscaled) + 1e-6)
+            * 2
+        )
+        * 100
+    )
+
+    per_hour_mae = np.mean(np.abs(targets_unscaled - preds_unscaled), axis=0).flatten()
+
+    return {
+        "mae": mae,
+        "rmse": rmse,
+        "smape": smape,
+        "per_hour_mae": per_hour_mae.tolist(),
+        "samples": len(targets_unscaled),
+        "sequences": len(preds_unscaled),
+        "model_ready": True,
+    }
+
+
 # === Prediction API endpoints ===
 
 @app.get("/api/v1/predictions")
@@ -341,6 +415,12 @@ def get_current_prediction():
         "model_ready": predictor.is_ready(),
         "generated_at": datetime.now(timezone.utc).isoformat()
     }
+
+
+@app.get("/api/v1/model/metrics")
+def get_model_metrics():
+    """Exporteer validatiemetrics zodat het dashboard ze kan tonen."""
+    return evaluate_model_metrics()
 
 
 @app.get("/api/v1/predictions/week")

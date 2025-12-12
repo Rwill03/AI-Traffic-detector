@@ -939,6 +939,68 @@
       border: 1px solid var(--border);
     }
 
+    .eval-block {
+      margin-top: 18px;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: #ffffff;
+      box-shadow: 0 10px 20px rgba(17,24,39,0.05);
+    }
+
+    .eval-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .eval-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .eval-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .eval-chip {
+      border-radius: 12px;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      background: #f8fafc;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+    }
+
+    .eval-chip .label {
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 11px;
+    }
+
+    .eval-chip .value {
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .eval-meta {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .eval-chart {
+      height: 140px;
+    }
+
     .chart-header h2,
     .week-card h3,
     .section-title {
@@ -1118,6 +1180,36 @@
               <canvas id="prediction-chart"></canvas>
             </div>
 
+            <!-- Evaluation metrics -->
+            <div class="eval-block">
+              <div class="eval-header">
+                <div class="eval-title">Model evaluation</div>
+                <div class="card-tag">validation</div>
+              </div>
+              <div class="eval-stats">
+                <div class="eval-chip">
+                  <span class="label">MAE</span>
+                  <span class="value" id="eval-mae">--</span>
+                </div>
+                <div class="eval-chip">
+                  <span class="label">RMSE</span>
+                  <span class="value" id="eval-rmse">--</span>
+                </div>
+                <div class="eval-chip">
+                  <span class="label">sMAPE</span>
+                  <span class="value" id="eval-smape">--</span>
+                </div>
+                <div class="eval-chip">
+                  <span class="label">Val seq</span>
+                  <span class="value" id="eval-seq">--</span>
+                </div>
+              </div>
+              <div class="eval-meta" id="eval-meta">Waiting for metrics…</div>
+              <div class="eval-chart">
+                <canvas id="eval-chart"></canvas>
+              </div>
+            </div>
+
             <!-- Model Status -->
             <div id="model-status" class="model-status dummy">
               <span class="dot"></span>
@@ -1188,8 +1280,10 @@
   <script>
     const API_URL = "/api/v1/status";
     const PREDICTIONS_URL = "/api/v1/predictions";
+    const METRICS_URL = "/api/v1/model/metrics";
 
     let predictionChart = null;
+    let evalChart = null;
     let selectedDate = new Date().toISOString().split('T')[0];
 
     // Tab switching
@@ -1203,6 +1297,7 @@
 
         if (btn.dataset.tab === 'predictions') {
           loadPredictions();
+          loadMetrics();
         }
       });
     });
@@ -1362,6 +1457,11 @@
     }
 
     // Predictions functionality
+    function fmt(value, digits = 2) {
+      if (value === null || value === undefined || isNaN(value)) return "--";
+      return Number(value).toFixed(digits);
+    }
+
     function initDaySelector() {
       const selector = document.getElementById('day-selector');
       selector.innerHTML = '';
@@ -1562,6 +1662,71 @@
         `;
         
         list.appendChild(item);
+      });
+    }
+
+    async function loadMetrics() {
+      const meta = document.getElementById('eval-meta');
+      meta.textContent = "Loading metrics…";
+      try {
+        const resp = await fetch(METRICS_URL, { cache: "no-store" });
+        if (!resp.ok) {
+          meta.textContent = "Geen metrics beschikbaar";
+          return;
+        }
+        const data = await resp.json();
+        document.getElementById('eval-mae').textContent = fmt(data.mae);
+        document.getElementById('eval-rmse').textContent = fmt(data.rmse);
+        document.getElementById('eval-smape').textContent = fmt(data.smape);
+        document.getElementById('eval-seq').textContent = data.sequences ?? "--";
+        meta.textContent = `Validatie op ${data.sequences ?? "–"} sequences · ${data.samples ?? "–"} samples`;
+        renderEvalChart(data.per_hour_mae || []);
+      } catch (e) {
+        console.error("Error loading metrics", e);
+        meta.textContent = "Kon metrics niet ophalen";
+      }
+    }
+
+    function renderEvalChart(values) {
+      const ctx = document.getElementById('eval-chart').getContext('2d');
+      const labels = Array.from({ length: values.length || 24 }, (_, i) =>
+        i.toString().padStart(2, '0') + ':00'
+      );
+      const dataVals = values.length ? values : Array.from({ length: labels.length }, () => 0);
+
+      if (evalChart) evalChart.destroy();
+
+      evalChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: 'MAE per hour',
+            data: dataVals,
+            borderColor: '#1f2937',
+            backgroundColor: 'rgba(79, 70, 229, 0.12)',
+            fill: true,
+            tension: 0.3,
+            pointRadius: 0,
+            borderWidth: 2,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: {
+              ticks: { color: '#6b7280', font: { size: 9 } },
+              grid: { display: false },
+            },
+            y: {
+              ticks: { color: '#6b7280', font: { size: 10 } },
+              grid: { color: 'rgba(148, 163, 184, 0.2)' },
+              beginAtZero: true
+            }
+          }
+        }
       });
     }
 
