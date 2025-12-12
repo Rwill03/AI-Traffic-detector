@@ -62,6 +62,13 @@ train_model(epochs=100, verbose=True)
 "
 ```
 
+### Validatie & evaluatie
+- Training gebruikt nu altijd een hold-out validatieset (minimaal 24 uur input + 24 uur target, dus minstens 96 uurlijkse punten nodig).
+- Draai validatiemetrics (MAE/RMSE/MAPE) op de opgeslagen `best_model.pth`:
+```bash
+docker compose exec api python3 "Evaluation model/evaluate_model.py"
+```
+
 Training parameters kunnen aangepast worden in `transformer_model/config.py`:
 - `epochs`: Aantal training epochs (default: 100)
 - `batch_size`: Batch grootte (default: 4)

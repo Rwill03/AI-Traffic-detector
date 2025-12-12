@@ -122,9 +122,12 @@ def add_temporal_features(data: np.ndarray, timestamps: pd.Series) -> np.ndarray
     return features
 
 
-def prepare_data(scaler_path: str = None):
+def prepare_data(scaler_path: str = None, reuse_scaler: bool = False):
     """
     Bereid data voor op training met temporal features.
+    Args:
+        scaler_path: Optioneel pad naar de scaler file.
+        reuse_scaler: Hergebruik een bestaande scaler als deze bestaat.
     
     Returns:
         train_loader: DataLoader voor training
@@ -143,8 +146,21 @@ def prepare_data(scaler_path: str = None):
     print(f"Total hourly data points: {len(hourly)}")
     
     # Normaliseer alleen car counts met scaler
-    scaler = MinMaxScaler(feature_range=(0, 1))
-    car_normalized = scaler.fit_transform(hourly[['car']].values)
+    scaler_file = scaler_path or os.path.join(MODEL_PATH, "scaler.pkl")
+    scaler = None
+    
+    if reuse_scaler and os.path.exists(scaler_file):
+        with open(scaler_file, 'rb') as f:
+            scaler = pickle.load(f)
+    
+    if scaler is None:
+        scaler = MinMaxScaler(feature_range=(0, 1))
+        car_normalized = scaler.fit_transform(hourly[['car']].values)
+        os.makedirs(MODEL_PATH, exist_ok=True)
+        with open(scaler_file, 'wb') as f:
+            pickle.dump(scaler, f)
+    else:
+        car_normalized = scaler.transform(hourly[['car']].values)
     
     # Voeg temporal features toe (al genormaliseerd)
     hours_normalized = hourly['hour_of_day'].values.reshape(-1, 1) / 23.0
@@ -156,40 +172,42 @@ def prepare_data(scaler_path: str = None):
     
     print(f"Feature shape: {data.shape}")  # Should be (N, 4)
     
-    # Sla scaler op
-    os.makedirs(MODEL_PATH, exist_ok=True)
-    scaler_file = scaler_path or os.path.join(MODEL_PATH, "scaler.pkl")
-    with open(scaler_file, 'wb') as f:
-        pickle.dump(scaler, f)
-    
     # Split data
     seq_len = MODEL_CONFIG['seq_len']
     pred_len = MODEL_CONFIG['pred_len']
     
-    # Minimum data nodig: seq_len + pred_len
-    min_data_needed = seq_len + pred_len
-    
-    if len(data) < min_data_needed:
-        raise ValueError(f"Te weinig data: {len(data)} punten, minimaal {min_data_needed} nodig")
-    
-    # Gebruik 80% voor training, maar zorg dat er genoeg is voor beide
-    split_idx = int(len(data) * TRAIN_CONFIG['train_split'])
-    
-    # Zorg dat train en val minstens 1 sequence kunnen maken
+    # Minimum data nodig: seq_len + pred_len per set
     min_for_sequence = seq_len + pred_len
-    if split_idx < min_for_sequence:
-        split_idx = min_for_sequence
-    if len(data) - split_idx < min_for_sequence:
-        # Niet genoeg voor validatie, gebruik alles voor training
-        split_idx = len(data)
+    min_total = min_for_sequence * 2
     
-    train_data = data[:split_idx]
-    val_data = data[split_idx:] if split_idx < len(data) else None
+    total_points = len(data)
+    if total_points < min_total:
+        raise ValueError(
+            f"Te weinig data: {total_points} punten, minimaal {min_total} nodig "
+            f"voor train en validatie (seq_len={seq_len}, pred_len={pred_len})"
+        )
+    
+    # Tijd-gebaseerde split: hou altijd minimaal één volledige sequence voor train én val
+    val_len = max(int(total_points * (1 - TRAIN_CONFIG['train_split'])), min_for_sequence)
+    train_len = total_points - val_len
+    
+    if train_len < min_for_sequence:
+        train_len = min_for_sequence
+        val_len = total_points - train_len
+    
+    if val_len < min_for_sequence:
+        raise ValueError(
+            f"Splitsing mislukt: train_len={train_len}, val_len={val_len}. "
+            f"Verzamel meer data zodat beide minimaal {min_for_sequence} bevatten."
+        )
+    
+    train_data = data[:train_len]
+    val_data = data[-val_len:]
     
     # Maak datasets
     train_dataset = TrafficDataset(train_data, seq_len, pred_len)
     
-    print(f"Train dataset size: {len(train_dataset)}")
+    print(f"Train dataset size: {len(train_dataset)} sequences ({train_len} punten)")
     
     # Maak dataloaders
     batch_size = min(TRAIN_CONFIG['batch_size'], len(train_dataset))
@@ -212,7 +230,7 @@ def prepare_data(scaler_path: str = None):
                 shuffle=False,
                 drop_last=False
             )
-            print(f"Validation dataset size: {len(val_dataset)}")
+            print(f"Validation dataset size: {len(val_dataset)} sequences ({val_len} punten)")
     
     if val_loader is None:
         print("No validation set (not enough data)")

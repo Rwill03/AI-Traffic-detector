@@ -2,13 +2,20 @@
 Genereer 7 dagen realistische verkeersdata met spitsuren.
 Dit script vult de database met testdata voor het trainen van het model.
 """
+import os
 import random
 from datetime import datetime, timedelta
-import requests
 import argparse
+from sqlalchemy import create_engine, text
+import json
+from urllib import request, error
 
 # API endpoint
 API_URL = "http://localhost:8001/api/v1/observation"
+DEFAULT_DB_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql+psycopg2://traffic_user:supersecretpassword@db/traffic_db",
+)
 
 
 def get_traffic_count(hour: int, day_of_week: int) -> dict:
@@ -113,12 +120,22 @@ def generate_day_data(date: datetime, camera_id: str = "cam_A") -> list:
 
 
 def send_observation(observation: dict, api_url: str) -> bool:
-    """Stuur een observatie naar de API."""
+    """Stuur een observatie naar de API zonder externe dependencies."""
+    data = json.dumps(observation).encode("utf-8")
+    req = request.Request(
+        api_url,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
     try:
-        response = requests.post(api_url, json=observation, timeout=10)
-        return response.status_code == 200
-    except requests.exceptions.RequestException as e:
-        print(f"Error sending observation: {e}")
+        with request.urlopen(req, timeout=10) as resp:
+            return resp.status == 200
+    except error.HTTPError as e:
+        print(f"HTTP error: {e.code} {e.reason}")
+        return False
+    except error.URLError as e:
+        print(f"Connection error: {e.reason}")
         return False
 
 
@@ -170,11 +187,26 @@ def generate_week_data(start_date: datetime = None, days: int = 7, api_url: str 
     return successful, total_observations
 
 
+def clear_database(db_url: str = DEFAULT_DB_URL) -> bool:
+    """Leeg de traffic_samples tabel."""
+    try:
+        engine = create_engine(db_url, future=True)
+        with engine.begin() as conn:
+            conn.execute(text("TRUNCATE TABLE traffic_samples RESTART IDENTITY CASCADE"))
+        print(f"Database geleegd via {db_url}")
+        return True
+    except Exception as e:
+        print(f"Kon database niet legen: {e}")
+        return False
+
+
 def main():
     parser = argparse.ArgumentParser(description='Generate realistic traffic data')
-    parser.add_argument('--days', type=int, default=7, help='Number of days to generate')
+    parser.add_argument('--days', type=int, default=30, help='Number of days to generate')
     parser.add_argument('--start-date', type=str, help='Start date (YYYY-MM-DD)')
     parser.add_argument('--api-url', type=str, default=API_URL, help='API URL')
+    parser.add_argument('--db-url', type=str, default=None, help='Database URL voor reset')
+    parser.add_argument('--reset-db', action='store_true', help='Leeg de traffic_samples tabel voor genereren')
     parser.add_argument('--dry-run', action='store_true', help='Print data without sending')
     
     args = parser.parse_args()
@@ -208,6 +240,9 @@ def main():
                 bar = "█" * (hourly[hour] // 5)
                 print(f"  {hour:02d}:00 | {hourly[hour]:3d} cars | {bar}")
     else:
+        db_url = args.db_url or DEFAULT_DB_URL
+        if args.reset_db:
+            clear_database(db_url)
         generate_week_data(start_date, args.days, args.api_url)
 
 
