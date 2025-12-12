@@ -130,8 +130,9 @@ def train_model(epochs: int = None, verbose: bool = True):
         print(f"\nModel parameters: {count_parameters(model):,}")
     
     # Training setup
-    criterion = nn.MSELoss()
-    optimizer = Adam(model.parameters(), lr=TRAIN_CONFIG['learning_rate'])
+    # Huber (Smooth L1) is wat robuuster tegen uitschieters dan MSE
+    criterion = nn.SmoothL1Loss(beta=0.1)
+    optimizer = Adam(model.parameters(), lr=TRAIN_CONFIG['learning_rate'], weight_decay=1e-4)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5, verbose=verbose)
     early_stopping = EarlyStopping(patience=TRAIN_CONFIG['early_stopping_patience'])
     
