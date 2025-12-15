@@ -61,7 +61,7 @@ def aggregate_hourly(df: pd.DataFrame) -> pd.DataFrame:
     df['hour'] = df['ts'].dt.floor('h')
     
     hourly = df.groupby('hour').agg({
-        'car': 'sum'
+        'car': 'mean'  # Gebruik mean in plaats van sum
     }).reset_index()
     
     # Voeg temporal features toe
@@ -294,7 +294,7 @@ def create_features_for_prediction(car_counts: np.ndarray, timestamps: pd.Dateti
         days = timestamps.dayofweek.values
     else:
         hours = np.array([t.hour for t in timestamps])
-        days = np.array([t.dayofweek() if hasattr(t, 'dayofweek') else t.weekday() for t in timestamps])
+        days = np.array([t.weekday() for t in timestamps])
     
     hours_normalized = hours.reshape(-1, 1) / 23.0
     days_normalized = days.reshape(-1, 1) / 6.0
