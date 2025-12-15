@@ -1246,12 +1246,12 @@
             </div>
 
             <div class="current-prediction">
-              <div class="current-hour-label">Predicted vehicles</div>
+              <div class="current-hour-label">Traffic Density</div>
               <div class="current-hour-value" id="current-prediction-value">--</div>
-              <div class="current-hour-unit">cars this hour</div>
+              <div class="current-hour-unit">vehicles visible at once</div>
               <div id="rush-indicator" class="rush-indicator normal">
                 <span class="dot"></span>
-                <span>Normal traffic</span>
+                <span>Normal density</span>
               </div>
             </div>
 
@@ -1266,11 +1266,11 @@
                 <div class="stat-value highlight" id="peak-cars">--</div>
               </div>
               <div class="stat-item">
-                <div class="stat-label">Daily Total</div>
+                <div class="stat-label">Daily Average</div>
                 <div class="stat-value" id="daily-total">--</div>
               </div>
               <div class="stat-item">
-                <div class="stat-label">Rush Hour Avg</div>
+                <div class="stat-label">Rush Hour Density</div>
                 <div class="stat-value" id="rush-avg">--</div>
               </div>
             </div>
@@ -1554,10 +1554,10 @@
         const rushIndicator = document.getElementById('rush-indicator');
         if (currentPred.is_rush_hour) {
           rushIndicator.className = 'rush-indicator rush';
-          rushIndicator.innerHTML = '<span class="dot warn"></span><span>Rush hour traffic</span>';
+          rushIndicator.innerHTML = '<span class="dot warn"></span><span>High density (rush hour)</span>';
         } else {
           rushIndicator.className = 'rush-indicator normal';
-          rushIndicator.innerHTML = '<span class="dot"></span><span>Normal traffic</span>';
+          rushIndicator.innerHTML = '<span class="dot"></span><span>Normal density</span>';
         }
       }
       
@@ -1567,7 +1567,8 @@
         document.getElementById('peak-hour').textContent = peakHour;
       }
       document.getElementById('peak-cars').textContent = summary.peak_cars || '--';
-      document.getElementById('daily-total').textContent = summary.total_predicted || '--';
+      const dailyAvg = summary.total_predicted ? Math.round(summary.total_predicted / 24) : '--';
+      document.getElementById('daily-total').textContent = dailyAvg;
       document.getElementById('rush-avg').textContent = summary.rush_hour_average || '--';
       
       // Update chart
@@ -1629,7 +1630,7 @@
               callbacks: {
                 label: function(context) {
                   const isRush = rushHours[context.dataIndex];
-                  return `${context.parsed.y} cars${isRush ? ' (rush hour)' : ''}`;
+                  return `${context.parsed.y} vehicles visible${isRush ? ' (rush hour)' : ''}`;
                 }
               }
             }
