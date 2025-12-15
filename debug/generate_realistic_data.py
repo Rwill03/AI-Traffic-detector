@@ -6,7 +6,11 @@ import os
 import random
 from datetime import datetime, timedelta
 import argparse
-from sqlalchemy import create_engine, text
+try:
+    from sqlalchemy import create_engine, text
+    HAS_SQLALCHEMY = True
+except ImportError:
+    HAS_SQLALCHEMY = False
 import json
 from urllib import request, error
 
@@ -21,6 +25,7 @@ DEFAULT_DB_URL = os.getenv(
 def get_traffic_count(hour: int, day_of_week: int) -> dict:
     """
     Genereer realistische traffic counts op basis van uur en dag.
+    Elk dag type heeft eigen patroon.
     
     Args:
         hour: Uur van de dag (0-23)
@@ -31,34 +36,48 @@ def get_traffic_count(hour: int, day_of_week: int) -> dict:
     """
     is_weekend = day_of_week >= 5
     
-    # Base multiplier voor weekend (minder verkeer)
-    weekend_factor = 0.6 if is_weekend else 1.0
-    
-    # Spitsuur patronen
-    if 7 <= hour <= 9:
-        # Ochtendspits
-        if is_weekend:
-            car = random.randint(15, 30)
-        else:
-            car = random.randint(50, 90)
-    elif 16 <= hour <= 18:
-        # Avondspits
-        if is_weekend:
+    # Verschillende patronen per dag type
+    if is_weekend:
+        # Weekend: minder verkeer, geen echte spits
+        if 7 <= hour <= 9:
+            car = random.randint(20, 40)
+        elif 16 <= hour <= 18:
+            car = random.randint(25, 45)
+        elif 10 <= hour <= 15:
             car = random.randint(20, 35)
+        elif 19 <= hour <= 22:
+            car = random.randint(10, 20)
+        elif 6 <= hour:
+            car = random.randint(5, 15)
         else:
-            car = random.randint(55, 95)
-    elif 10 <= hour <= 15:
-        # Overdag
-        car = random.randint(int(20 * weekend_factor), int(45 * weekend_factor))
-    elif 19 <= hour <= 22:
-        # Avond
-        car = random.randint(int(15 * weekend_factor), int(30 * weekend_factor))
-    elif 6 <= hour <= 7:
-        # Vroege ochtend
-        car = random.randint(int(10 * weekend_factor), int(25 * weekend_factor))
+            car = random.randint(1, 6)
     else:
-        # Nacht (23-5)
-        car = random.randint(1, 8)
+        # Weekdag: duidelijke spitsuren
+        # Vrijdag iets drukker in de middag (mensen gaan eerder weg)
+        if day_of_week == 4:  # Vrijdag
+            friday_boost = 1.1
+        else:
+            friday_boost = 1.0
+        
+        if 7 <= hour <= 9:
+            # Ochtendspits weekdag
+            car = random.randint(90, 150)
+        elif 16 <= hour <= 18:
+            # Avondspits weekdag (vrijdag iets drukker)
+            base = random.randint(95, 155)
+            car = int(base * friday_boost)
+        elif 10 <= hour <= 15:
+            # Middag weekdag
+            car = random.randint(30, 60)
+        elif 19 <= hour <= 22:
+            # Avond weekdag
+            car = random.randint(15, 30)
+        elif 6 <= hour:
+            # Vroege ochtend
+            car = random.randint(10, 25)
+        else:
+            # Nacht (0-5)
+            car = random.randint(1, 8)
     
     # Andere voertuigen (relatief aan auto's)
     truck = random.randint(0, max(1, car // 10)) if not is_weekend else random.randint(0, 2)
@@ -189,6 +208,9 @@ def generate_week_data(start_date: datetime = None, days: int = 7, api_url: str 
 
 def clear_database(db_url: str = DEFAULT_DB_URL) -> bool:
     """Leeg de traffic_samples tabel."""
+    if not HAS_SQLALCHEMY:
+        print("SQLAlchemy not available, skipping database clear")
+        return False
     try:
         engine = create_engine(db_url, future=True)
         with engine.begin() as conn:

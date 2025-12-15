@@ -96,7 +96,7 @@ class TrafficPredictor:
     def predict_for_date(self, target_date: datetime) -> List[Dict]:
         """
         Voorspel het aantal auto's voor een specifieke datum.
-        Houdt rekening met dag van de week (weekend vs doordeweeks).
+        Gebruikt historische gemiddelden per dag/uur combinatie als basis.
         
         Args:
             target_date: De datum waarvoor voorspeld moet worden
@@ -110,10 +110,14 @@ class TrafficPredictor:
         if not self.is_ready():
             return self._generate_dummy_predictions(target_start)
         
-        # Haal laatste bekende car counts op als basis
-        car_counts, _ = get_last_24_hours()
+        # Bereken dag van week en weekend voor target date
+        target_day_of_week = target_start.weekday()
+        is_weekend = target_day_of_week >= 5
         
-        # Maak features voor de target datum (met juiste dag/weekend info)
+        # Haal historische gemiddelden op voor deze dag/uur combinatie
+        car_counts = self._get_historical_pattern(target_day_of_week)
+        
+        # Maak features voor de target datum
         features = create_features_for_date(target_start, self.scaler, car_counts)
         input_tensor = torch.FloatTensor(features).unsqueeze(0).to(self.device)
         
@@ -125,6 +129,9 @@ class TrafficPredictor:
         output_np = output.cpu().numpy().reshape(-1, 1)
         predictions = self.scaler.inverse_transform(output_np).flatten()
         predictions = np.maximum(predictions, 0)
+        
+        # Post-processing: pas dag-specifieke correctie toe gebaseerd op historische data
+        predictions = self._apply_daytype_correction(predictions, target_day_of_week)
         
         # Maak resultaat
         results = []
@@ -138,6 +145,137 @@ class TrafficPredictor:
             })
         
         return results
+    
+    def _apply_daytype_correction(self, predictions: np.ndarray, target_day_of_week: int) -> np.ndarray:
+        """
+        Pas dag-specifieke correctie toe op basis van historische patronen.
+        Herschaalt predictions naar het historisch gemiddelde voor die specifieke dag.
+        
+        Args:
+            predictions: Raw model predictions
+            target_day_of_week: 0=maandag, 6=zondag
+            
+        Returns:
+            Gecorrigeerde predictions
+        """
+        try:
+            from .data_preprocessing import load_data_from_db, aggregate_hourly
+            
+            df = load_data_from_db()
+            if df.empty:
+                # Geen correctie mogelijk
+                is_weekend = target_day_of_week >= 5
+                return predictions * (0.4 if is_weekend else 1.0)
+            
+            hourly = aggregate_hourly(df)
+            hourly['hour_of_day'] = hourly['hour'].dt.hour
+            hourly['day_of_week'] = hourly['hour'].dt.dayofweek
+            
+            # Bereken gemiddelde per uur voor ALLE weekdagen (baseline model)
+            all_weekdays = hourly[hourly['day_of_week'] < 5].groupby('hour_of_day')['car'].mean()
+            
+            # Bereken gemiddelde per uur voor de TARGET dag
+            target_day = hourly[hourly['day_of_week'] == target_day_of_week].groupby('hour_of_day')['car'].mean()
+            
+            # Als target_day onvoldoende data heeft, gebruik weekend/weekday gemiddelde
+            if len(target_day) < 12:
+                is_weekend = target_day_of_week >= 5
+                if is_weekend:
+                    target_day = hourly[hourly['day_of_week'] >= 5].groupby('hour_of_day')['car'].mean()
+                else:
+                    target_day = all_weekdays
+            
+            corrected = predictions.copy()
+            for hour in range(24):
+                if hour in all_weekdays.index and hour in target_day.index:
+                    if all_weekdays[hour] > 0:
+                        # Bereken ratio van target dag t.o.v. weekday baseline
+                        ratio = target_day[hour] / all_weekdays[hour]
+                        corrected[hour] *= ratio
+                elif hour in target_day.index:
+                    # Gebruik absolute waarde uit historische data
+                    corrected[hour] = target_day[hour]
+            
+            return corrected
+            
+        except Exception as e:
+            print(f"Error applying daytype correction: {e}")
+            # Simpele fallback correctie
+            is_weekend = target_day_of_week >= 5
+            return predictions * (0.4 if is_weekend else 1.0)
+    
+    def _get_historical_pattern(self, target_day_of_week: int) -> np.ndarray:
+        """
+        Haal GENORMALISEERD historisch gemiddelde patroon op voor een specifieke dag.
+        Gebruikt een neutrale basis zodat het model leert op temporal features.
+        
+        Args:
+            target_day_of_week: 0=maandag, 6=zondag
+            
+        Returns:
+            Array van 24 car counts (genormaliseerde gemiddelde waarden)
+        """
+        try:
+            from .data_preprocessing import load_data_from_db, aggregate_hourly
+            
+            df = load_data_from_db()
+            if df.empty:
+                # Fallback naar dummy waarden
+                return self._generate_dummy_pattern(target_day_of_week)
+            
+            hourly = aggregate_hourly(df)
+            hourly['hour_of_day'] = hourly['hour'].dt.hour
+            hourly['day_of_week'] = hourly['hour'].dt.dayofweek
+            
+            # Gebruik ALGEMEEN gemiddelde per uur als basis (over alle dagen)
+            # Dit zorgt ervoor dat het model leert op temporal features te vertrouwen
+            # in plaats van op absolute input waarden
+            overall_pattern = hourly.groupby('hour_of_day')['car'].mean()
+            
+            # Zorg dat we 24 uren hebben (0-23)
+            result = np.zeros(24)
+            for hour in range(24):
+                if hour in overall_pattern.index:
+                    result[hour] = overall_pattern[hour]
+                else:
+                    # Gebruik overall gemiddelde
+                    result[hour] = overall_pattern.mean() if len(overall_pattern) > 0 else 20
+            
+            return result.reshape(-1, 1)
+            
+        except Exception as e:
+            print(f"Error getting historical pattern: {e}")
+            # Gebruik neutraal patroon
+            return np.ones((24, 1)) * 20
+    
+    def _generate_dummy_pattern(self, day_of_week: int) -> np.ndarray:
+        """Genereer een dummy patroon op basis van dag van de week."""
+        is_weekend = day_of_week >= 5
+        pattern = np.zeros(24)
+        
+        for hour in range(24):
+            if is_weekend:
+                # Weekend: lager verkeer, geen echte spits
+                if 7 <= hour <= 9 or 16 <= hour <= 18:
+                    pattern[hour] = 30 + np.random.randint(-5, 5)
+                elif 10 <= hour <= 15:
+                    pattern[hour] = 25 + np.random.randint(-5, 5)
+                elif 6 <= hour <= 22:
+                    pattern[hour] = 15 + np.random.randint(-5, 5)
+                else:
+                    pattern[hour] = 3 + np.random.randint(-2, 2)
+            else:
+                # Weekday: duidelijke spitsuren
+                if 7 <= hour <= 9 or 16 <= hour <= 18:
+                    pattern[hour] = 60 + np.random.randint(-10, 10)
+                elif 10 <= hour <= 15:
+                    pattern[hour] = 30 + np.random.randint(-5, 5)
+                elif 6 <= hour <= 22:
+                    pattern[hour] = 20 + np.random.randint(-5, 5)
+                else:
+                    pattern[hour] = 3 + np.random.randint(-2, 2)
+        
+        return pattern.reshape(-1, 1)
     
     def _generate_dummy_predictions(self, base_time: datetime = None) -> List[Dict]:
         """Genereer dummy predictions als het model niet beschikbaar is."""
