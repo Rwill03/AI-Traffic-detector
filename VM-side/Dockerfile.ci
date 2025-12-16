@@ -1,0 +1,20 @@
+# Lightweight Dockerfile voor CI/CD testing
+# Gebruikt Python slim image i.p.v. NVIDIA CUDA (~50MB vs ~3GB)
+# NIET voor productie - alleen voor testing!
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# CPU-only PyTorch (veel kleiner dan CUDA versie)
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+
+COPY . .
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]
