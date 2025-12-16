@@ -117,6 +117,19 @@ class TrafficPredictor:
         # Haal historische gemiddelden op voor deze dag/uur combinatie
         car_counts = self._get_historical_pattern(target_day_of_week)
         
+        # Als het weekend is, gebruik het historische profiel direct (stabieler dan model-output op weekday data)
+        if is_weekend and car_counts is not None:
+            results = []
+            for i, val in enumerate(car_counts.flatten()):
+                hour_time = target_start + timedelta(hours=i)
+                results.append({
+                    'hour': hour_time.strftime('%Y-%m-%d %H:00'),
+                    'hour_of_day': hour_time.hour,
+                    'predicted_cars': int(round(val)),
+                    'is_rush_hour': hour_time.hour in [7, 8, 9, 16, 17, 18]
+                })
+            return results
+        
         # Maak features voor de target datum
         features = create_features_for_date(target_start, self.scaler, car_counts)
         input_tensor = torch.FloatTensor(features).unsqueeze(0).to(self.device)
@@ -191,6 +204,8 @@ class TrafficPredictor:
                     if all_weekdays[hour] > 0:
                         # Bereken ratio van target dag t.o.v. weekday baseline
                         ratio = target_day[hour] / all_weekdays[hour]
+                        # Clamp ratio om extreme afwijkingen door uitschieters te vermijden
+                        ratio = max(0.5, min(1.5, ratio))
                         corrected[hour] *= ratio
                 elif hour in target_day.index:
                     # Gebruik absolute waarde uit historische data
@@ -206,46 +221,45 @@ class TrafficPredictor:
     
     def _get_historical_pattern(self, target_day_of_week: int) -> np.ndarray:
         """
-        Haal GENORMALISEERD historisch gemiddelde patroon op voor een specifieke dag.
-        Gebruikt een neutrale basis zodat het model leert op temporal features.
+        Haal historisch gemiddelde patroon op voor een specifieke dag (weekday/weekend bewust).
         
         Args:
             target_day_of_week: 0=maandag, 6=zondag
             
         Returns:
-            Array van 24 car counts (genormaliseerde gemiddelde waarden)
+            Array van 24 car counts
         """
         try:
             from .data_preprocessing import load_data_from_db, aggregate_hourly
             
             df = load_data_from_db()
             if df.empty:
-                # Fallback naar dummy waarden
                 return self._generate_dummy_pattern(target_day_of_week)
             
             hourly = aggregate_hourly(df)
             hourly['hour_of_day'] = hourly['hour'].dt.hour
             hourly['day_of_week'] = hourly['hour'].dt.dayofweek
             
-            # Gebruik ALGEMEEN gemiddelde per uur als basis (over alle dagen)
-            # Dit zorgt ervoor dat het model leert op temporal features te vertrouwen
-            # in plaats van op absolute input waarden
-            overall_pattern = hourly.groupby('hour_of_day')['car'].mean()
+            # Prefer exact day-of-week gemiddelde; val terug naar weekend/weekday gemiddelde
+            target = hourly[hourly['day_of_week'] == target_day_of_week].groupby('hour_of_day')['car'].mean()
+            if len(target) < 12:
+                if target_day_of_week >= 5:
+                    target = hourly[hourly['day_of_week'] >= 5].groupby('hour_of_day')['car'].mean()
+                else:
+                    target = hourly[hourly['day_of_week'] < 5].groupby('hour_of_day')['car'].mean()
             
-            # Zorg dat we 24 uren hebben (0-23)
+            if len(target) == 0:
+                target = hourly.groupby('hour_of_day')['car'].mean()
+            
+            fallback_val = target.mean() if len(target) > 0 else 20
             result = np.zeros(24)
             for hour in range(24):
-                if hour in overall_pattern.index:
-                    result[hour] = overall_pattern[hour]
-                else:
-                    # Gebruik overall gemiddelde
-                    result[hour] = overall_pattern.mean() if len(overall_pattern) > 0 else 20
+                result[hour] = target.get(hour, fallback_val)
             
             return result.reshape(-1, 1)
             
         except Exception as e:
             print(f"Error getting historical pattern: {e}")
-            # Gebruik neutraal patroon
             return np.ones((24, 1)) * 20
     
     def _generate_dummy_pattern(self, day_of_week: int) -> np.ndarray:

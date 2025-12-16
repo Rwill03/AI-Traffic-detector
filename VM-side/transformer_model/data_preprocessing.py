@@ -142,6 +142,9 @@ def prepare_data(scaler_path: str = None, reuse_scaler: bool = False):
     
     hourly = aggregate_hourly(df)
     hourly = fill_missing_hours(hourly)
+    # Bescherm tegen uitschieters: cap car counts op 99e percentiel zodat schaal niet wordt opgeblazen
+    clip_max = float(np.percentile(hourly['car'].values, 99))
+    clip_max = max(clip_max, 1.0)  # voorkom clip op 0
     
     print(f"Total hourly data points: {len(hourly)}")
     
@@ -152,15 +155,21 @@ def prepare_data(scaler_path: str = None, reuse_scaler: bool = False):
     if reuse_scaler and os.path.exists(scaler_file):
         with open(scaler_file, 'rb') as f:
             scaler = pickle.load(f)
+        # Als oude scaler geen clip_max_ had, vul met huidige berekende waarde
+        if not hasattr(scaler, 'clip_max_'):
+            scaler.clip_max_ = clip_max
     
     if scaler is None:
         scaler = MinMaxScaler(feature_range=(0, 1))
-        car_normalized = scaler.fit_transform(hourly[['car']].values)
+        car_normalized = scaler.fit_transform(hourly[['car']].clip(upper=clip_max).values)
         os.makedirs(MODEL_PATH, exist_ok=True)
+        scaler.clip_max_ = clip_max
         with open(scaler_file, 'wb') as f:
             pickle.dump(scaler, f)
     else:
-        car_normalized = scaler.transform(hourly[['car']].values)
+        # Clip input op dezelfde waarde als tijdens fitten (indien beschikbaar)
+        clip_val = getattr(scaler, 'clip_max_', clip_max)
+        car_normalized = scaler.transform(hourly[['car']].clip(upper=clip_val).values)
     
     # Voeg temporal features toe (al genormaliseerd)
     hours_normalized = hourly['hour_of_day'].values.reshape(-1, 1) / 23.0
@@ -273,6 +282,32 @@ def get_last_24_hours() -> tuple:
     return car_counts, timestamps
 
 
+def get_weekday_hourly_profile(weekday: int) -> np.ndarray:
+    """
+    Geef een mediane per-uur profiel voor een specifieke weekday (0=ma, 6=zo).
+    Gebruikt historische data zodat we een realistischer basispatroon hebben,
+    vooral nuttig voor weekenddagen.
+    """
+    df = load_data_from_db()
+    if df.empty:
+        return None
+    
+    df['ts'] = pd.to_datetime(df['ts'])
+    df = df[df['ts'].dt.dayofweek == weekday]
+    if df.empty:
+        return None
+    
+    # Gebruik dezelfde aggregatie als training: som per uur, daarna mediane per uur over dagen
+    hourly = aggregate_hourly(df)
+    hourly['hour_of_day'] = hourly['hour'].dt.hour
+    
+    per_hour = hourly.groupby('hour_of_day')['car'].median()
+    profile = np.zeros(24)
+    for h in range(24):
+        profile[h] = per_hour.get(h, 0)
+    return profile.reshape(-1, 1)
+
+
 def create_features_for_prediction(car_counts: np.ndarray, timestamps: pd.DatetimeIndex, scaler) -> np.ndarray:
     """
     Maak features voor prediction input.
@@ -285,6 +320,11 @@ def create_features_for_prediction(car_counts: np.ndarray, timestamps: pd.Dateti
     Returns:
         Features array (24, 4) - [car_normalized, hour_normalized, day_normalized, is_weekend]
     """
+    # Clip car counts tegen dezelfde cap als tijdens training (als beschikbaar) om extreem hoge waarden te dempen
+    clip_val = getattr(scaler, 'clip_max_', None)
+    if clip_val is not None:
+        car_counts = np.clip(car_counts, 0, clip_val)
+
     # Normaliseer car counts
     car_normalized = scaler.transform(car_counts)
     
@@ -325,6 +365,10 @@ def create_features_for_date(target_date: datetime, scaler, last_car_counts: np.
     if last_car_counts is None:
         # Dummy waarden
         last_car_counts = np.ones((24, 1)) * 20  # Gemiddelde schatting
+    
+    clip_val = getattr(scaler, 'clip_max_', None)
+    if clip_val is not None:
+        last_car_counts = np.clip(last_car_counts, 0, clip_val)
     
     return create_features_for_prediction(last_car_counts, timestamps, scaler)
 

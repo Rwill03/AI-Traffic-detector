@@ -67,22 +67,30 @@ def evaluate(verbose: bool = True):
     mae = mean_absolute_error(targets_unscaled.flatten(), preds_unscaled.flatten())
     mse = mean_squared_error(targets_unscaled.flatten(), preds_unscaled.flatten())
     rmse = float(np.sqrt(mse))
-    mape = np.mean(np.abs((targets_unscaled - preds_unscaled) / (targets_unscaled + 1e-6))) * 100
+    # sMAPE is stabieler bij lage waarden (consistent met main.py API)
+    smape = float(
+        np.mean(
+            np.abs(preds_unscaled - targets_unscaled)
+            / (np.abs(preds_unscaled) + np.abs(targets_unscaled) + 1e-6)
+            * 2
+        )
+        * 100
+    )
     
     per_hour_mae = np.mean(np.abs(targets_unscaled - preds_unscaled), axis=0).flatten()
     
     if verbose:
         print("Validatie metrics (car count):")
-        print(f"- MAE : {mae:.3f}")
-        print(f"- RMSE: {rmse:.3f}")
-        print(f"- MAPE: {mape:.2f}%")
+        print(f"- MAE  : {mae:.3f}")
+        print(f"- RMSE : {rmse:.3f}")
+        print(f"- sMAPE: {smape:.2f}%")
         print("Gemiddelde MAE per voorspelde uur (0-23):")
         print(", ".join(f"{v:.2f}" for v in per_hour_mae))
     
     return {
         "mae": float(mae),
         "rmse": float(rmse),
-        "mape": float(mape),
+        "smape": float(smape),
         "per_hour_mae": per_hour_mae.tolist()
     }
 

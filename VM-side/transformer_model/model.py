@@ -51,7 +51,6 @@ class TrafficTransformer(nn.Module):
         d_model: int = MODEL_CONFIG['d_model'],
         nhead: int = MODEL_CONFIG['nhead'],
         num_encoder_layers: int = MODEL_CONFIG['num_encoder_layers'],
-        num_decoder_layers: int = MODEL_CONFIG['num_decoder_layers'],
         dim_feedforward: int = MODEL_CONFIG['dim_feedforward'],
         dropout: float = MODEL_CONFIG['dropout'],
         seq_len: int = MODEL_CONFIG['seq_len'],
@@ -102,16 +101,15 @@ class TrafficTransformer(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
                 
-    def forward(self, src, tgt=None):
+    def forward(self, src):
         """
         Forward pass.
         
         Args:
             src: Source sequence (batch, seq_len, input_dim)
-            tgt: Target sequence (niet gebruikt, voor backwards compatibility)
             
         Returns:
-            Output predictions (batch, pred_len, input_dim)
+            Output predictions (batch, pred_len, output_dim)
         """
         batch_size = src.size(0)
         
@@ -182,13 +180,12 @@ if __name__ == "__main__":
     # Test forward pass
     batch_size = 4
     seq_len = MODEL_CONFIG['seq_len']
-    pred_len = MODEL_CONFIG['pred_len']
+    input_dim = MODEL_CONFIG['input_dim']  # 4 features
     
-    src = torch.randn(batch_size, seq_len, 1).to(device)
-    tgt = torch.randn(batch_size, pred_len, 1).to(device)
+    src = torch.randn(batch_size, seq_len, input_dim).to(device)
     
-    output = model(src, tgt)
-    print(f"Output shape: {output.shape}")  # Should be (batch_size, pred_len, 1)
+    output = model(src)
+    print(f"Output shape: {output.shape}")  # Should be (batch_size, pred_len, output_dim)
     
     # Test inference
     pred = model.predict(src)

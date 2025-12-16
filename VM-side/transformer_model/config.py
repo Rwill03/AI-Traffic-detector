@@ -17,7 +17,6 @@ MODEL_CONFIG = {
     "d_model": 64,            # transformer dimensie
     "nhead": 4,               # aantal attention heads
     "num_encoder_layers": 2,  # aantal encoder layers
-    "num_decoder_layers": 2,  # aantal decoder layers
     "dim_feedforward": 128,   # feedforward dimensie
     "dropout": 0.1,           # dropout rate
     "seq_len": 24,            # input sequence length (24 uur)
@@ -27,18 +26,15 @@ MODEL_CONFIG = {
 # Training parameters
 TRAIN_CONFIG = {
     "batch_size": 4,
-    "epochs": 100,
-    "learning_rate": 0.001,
+    "epochs": 150,
+    "learning_rate": 0.0005,  # Lagere learning rate voor betere convergentie
     "train_split": 0.8,
-    "early_stopping_patience": 10,
+    "early_stopping_patience": 15,  # Meer patience voor betere training
 }
 
 # Paths
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "saved_models")
 BEST_MODEL_PATH = os.path.join(MODEL_PATH, "best_model.pth")
-
-# Device
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def get_device():
     """Return het beste beschikbare device (GPU of CPU)."""

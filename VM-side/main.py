@@ -395,7 +395,10 @@ def get_predictions(
         "predictions": predictions,
         "summary": summary,
         "model_ready": predictor.is_ready(),
-        "generated_at": datetime.now(timezone.utc).isoformat()
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        # Clarify that values are per-snapshot averages within each hour block
+        "value_unit": "avg vehicles per snapshot (hourly block)",
+        "value_note": "Not an hourly total; reflects average vehicles visible per snapshot within each hour"
     }
 
 
@@ -413,7 +416,9 @@ def get_current_prediction():
     return {
         "current_hour": current,
         "model_ready": predictor.is_ready(),
-        "generated_at": datetime.now(timezone.utc).isoformat()
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "value_unit": "avg vehicles per snapshot (hourly block)",
+        "value_note": "Not an hourly total; reflects average vehicles visible per snapshot within each hour"
     }
 
 
@@ -447,5 +452,7 @@ def get_week_predictions():
     return {
         "week_predictions": week_predictions,
         "model_ready": predictor.is_ready(),
-        "generated_at": datetime.now(timezone.utc).isoformat()
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "value_unit": "avg vehicles per snapshot (hourly block)",
+        "value_note": "Not an hourly total; reflects average vehicles visible per snapshot within each hour"
     }

@@ -926,6 +926,13 @@
       border: 1px solid var(--border);
     }
 
+    .unit-note {
+      margin: 8px 0 12px;
+      color: var(--text-muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
     .eval-block {
       margin-top: 18px;
       padding: 14px;
@@ -1186,13 +1193,17 @@
         <div class="card">
           <div class="card-inner">
             <div class="card-header">
-              <div class="card-title">Traffic Forecast</div>
+              <div class="card-title">Traffic Forecast (per snapshot)</div>
               <div class="card-tag">AI Transformer</div>
             </div>
 
             <!-- Day Selector -->
             <div class="day-selector" id="day-selector">
               <!-- Populated by JS -->
+            </div>
+
+            <div class="unit-note">
+              Values show the average vehicles visible per snapshot within each hour block.
             </div>
 
             <!-- Chart -->
@@ -1241,14 +1252,14 @@
         <div class="card">
           <div class="card-inner">
             <div class="card-header">
-              <div class="card-title">Current Hour</div>
+              <div class="card-title">Current Hour Snapshot Avg</div>
               <div class="card-tag">live</div>
             </div>
 
             <div class="current-prediction">
-              <div class="current-hour-label">Traffic Density</div>
+              <div class="current-hour-label">Avg vehicles per snapshot</div>
               <div class="current-hour-value" id="current-prediction-value">--</div>
-              <div class="current-hour-unit">vehicles visible at once</div>
+              <div class="current-hour-unit">within this hour block </div>
               <div id="rush-indicator" class="rush-indicator normal">
                 <span class="dot"></span>
                 <span>Normal density</span>
@@ -1262,15 +1273,15 @@
                 <div class="stat-value" id="peak-hour">--:00</div>
               </div>
               <div class="stat-item">
-                <div class="stat-label">Peak Cars</div>
+                <div class="stat-label">Peak snapshot avg</div>
                 <div class="stat-value highlight" id="peak-cars">--</div>
               </div>
               <div class="stat-item">
-                <div class="stat-label">Daily Average</div>
+                <div class="stat-label">Daily snapshot avg</div>
                 <div class="stat-value" id="daily-total">--</div>
               </div>
               <div class="stat-item">
-                <div class="stat-label">Rush Hour Density</div>
+                <div class="stat-label">Rush snapshot avg</div>
                 <div class="stat-value" id="rush-avg">--</div>
               </div>
             </div>
@@ -1606,7 +1617,7 @@
         data: {
           labels: labels,
           datasets: [{
-            label: 'Predicted Cars',
+            label: 'Avg vehicles per snapshot',
             data: values,
             backgroundColor: backgroundColors,
             borderColor: borderColors,
@@ -1630,7 +1641,7 @@
               callbacks: {
                 label: function(context) {
                   const isRush = rushHours[context.dataIndex];
-                  return `${context.parsed.y} vehicles visible${isRush ? ' (rush hour)' : ''}`;
+                  return `${context.parsed.y} vehicles per snapshot${isRush ? ' (rush hour)' : ''}`;
                 }
               }
             }
@@ -1679,7 +1690,7 @@
         
         item.innerHTML = `
           <span class="prediction-hour">${hourStr}</span>
-          <span class="prediction-value">${pred.predicted_cars} cars</span>
+          <span class="prediction-value">${pred.predicted_cars} cars/snapshot</span>
         `;
         
         list.appendChild(item);
