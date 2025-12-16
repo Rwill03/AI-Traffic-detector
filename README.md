@@ -6,6 +6,7 @@ Een real-time verkeersbewakingssysteem dat AI-gestuurde voertuigdetectie combine
 ![Model](https://img.shields.io/badge/Detection-RF--DETR-green)
 ![Prediction](https://img.shields.io/badge/Prediction-Transformer-purple)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
+[![CI/CD](https://github.com/Rwill03/AI-Traffic-detector/actions/workflows/ci.yml/badge.svg)](https://github.com/Rwill03/AI-Traffic-detector/actions/workflows/ci.yml)
 
 ## 📋 Inhoudsopgave
 
@@ -19,6 +20,7 @@ Een real-time verkeersbewakingssysteem dat AI-gestuurde voertuigdetectie combine
 - [API Endpoints](#api-endpoints)
 - [Dashboard Interface](#dashboard-interface)
 - [Model Evaluatie](#model-evaluatie)
+- [CI/CD Pipeline](#cicd-pipeline)
 
 ---
 
@@ -596,6 +598,56 @@ print(f'Device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else
 
 ---
 
+## � CI/CD Pipeline
+
+Dit project gebruikt GitHub Actions voor automatische testing en deployment.
+
+### Workflows
+
+#### 1. CI/CD Pipeline (`ci.yml`)
+
+Wordt automatisch uitgevoerd bij elke push en pull request.
+
+| Stage | Beschrijving |
+|-------|--------------|
+| 🔍 **Lint** | Code quality checks met flake8 en black |
+| 🧪 **Test API** | FastAPI imports, model architectuur tests |
+| 📷 **Test Camera** | Syntax check van camera script |
+| 🐳 **Build Docker** | Build beide Docker images |
+| 🔗 **Integration** | Start docker-compose, test endpoints |
+| 🚀 **Deploy** | Deploy naar server (na merge naar main) |
+
+#### 2. Model Training (`train.yml`)
+
+Handmatig te starten of wekelijks (zondag 2:00 UTC).
+
+```bash
+# Handmatig starten via GitHub UI:
+# Actions → Model Training & Evaluation → Run workflow
+```
+
+### Deployment Configureren
+
+Om automatische deployment in te schakelen, voeg deze secrets toe in GitHub:
+
+1. Ga naar **Settings** → **Secrets and variables** → **Actions**
+2. Voeg toe:
+   - `SSH_PRIVATE_KEY`: SSH private key voor server toegang
+   - `SERVER_HOST`: Server IP (bijv. `100.89.11.82`)
+   - `SERVER_USER`: SSH gebruiker (bijv. `root`)
+
+### Lokaal Testen
+
+```bash
+# Install act voor lokale GitHub Actions testing
+# https://github.com/nektos/act
+
+# Run CI lokaal
+act push
+```
+
+---
+
 ## 📝 Licentie
 
 MIT License - Zie [LICENSE](LICENSE) voor details.
@@ -606,4 +658,5 @@ MIT License - Zie [LICENSE](LICENSE) voor details.
 
 - Edge detection & camera integration
 - Transformer model development
+- Dashboard & API design
 - Dashboard & API design

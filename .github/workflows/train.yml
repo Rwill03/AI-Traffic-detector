@@ -1,0 +1,196 @@
+name: Model Training & Evaluation
+
+on:
+  workflow_dispatch:
+    inputs:
+      epochs:
+        description: 'Number of training epochs'
+        required: false
+        default: '50'
+      force_retrain:
+        description: 'Force retrain even if model exists'
+        required: false
+        default: 'false'
+        type: boolean
+
+  schedule:
+    # Run weekly on Sunday at 2 AM UTC
+    - cron: '0 2 * * 0'
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  train-model:
+    name: 🧠 Train Transformer Model
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: traffic_db
+          POSTGRES_USER: traffic_user
+          POSTGRES_PASSWORD: supersecretpassword
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-training-${{ hashFiles('VM-side/requirements.txt') }}
+
+      - name: Install dependencies
+        run: |
+          cd VM-side
+          pip install -r requirements.txt
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Download existing model (if any)
+        uses: actions/cache@v4
+        with:
+          path: VM-side/transformer_model/saved_models
+          key: trained-model-${{ github.ref_name }}
+          restore-keys: |
+            trained-model-
+
+      - name: Generate sample data for testing
+        env:
+          DATABASE_URL: postgresql+psycopg2://traffic_user:supersecretpassword@localhost:5432/traffic_db
+        run: |
+          cd VM-side
+          python << 'EOF'
+          import os
+          import sys
+          sys.path.insert(0, '.')
+          
+          from sqlalchemy import create_engine
+          from main import Base, TrafficSample
+          from sqlalchemy.orm import sessionmaker
+          from datetime import datetime, timedelta, timezone
+          import random
+          
+          DATABASE_URL = os.getenv("DATABASE_URL")
+          engine = create_engine(DATABASE_URL)
+          Base.metadata.create_all(bind=engine)
+          Session = sessionmaker(bind=engine)
+          session = Session()
+          
+          # Generate 7 days of realistic traffic data
+          now = datetime.now(timezone.utc)
+          start = now - timedelta(days=7)
+          
+          for hour in range(7 * 24):  # 7 days * 24 hours
+              ts = start + timedelta(hours=hour)
+              hour_of_day = ts.hour
+              day_of_week = ts.weekday()
+              is_weekend = day_of_week >= 5
+              
+              # Realistic traffic pattern
+              if is_weekend:
+                  if 7 <= hour_of_day <= 9 or 16 <= hour_of_day <= 18:
+                      base = random.randint(5, 10)
+                  elif 10 <= hour_of_day <= 15:
+                      base = random.randint(3, 7)
+                  else:
+                      base = random.randint(0, 3)
+              else:
+                  if 7 <= hour_of_day <= 9 or 16 <= hour_of_day <= 18:
+                      base = random.randint(15, 30)
+                  elif 10 <= hour_of_day <= 15:
+                      base = random.randint(5, 15)
+                  else:
+                      base = random.randint(0, 5)
+              
+              # Add some samples per hour
+              for _ in range(random.randint(3, 6)):
+                  sample = TrafficSample(
+                      ts=ts + timedelta(minutes=random.randint(0, 59)),
+                      camera_id="ci-test",
+                      total_vehicles=base,
+                      car=base,
+                      truck=0,
+                      bus=0,
+                      motorcycle=0,
+                      bicycle=0
+                  )
+                  session.add(sample)
+          
+          session.commit()
+          print(f"✅ Generated {session.query(TrafficSample).count()} test samples")
+          session.close()
+          EOF
+
+      - name: Train model
+        env:
+          DATABASE_URL: postgresql+psycopg2://traffic_user:supersecretpassword@localhost:5432/traffic_db
+        run: |
+          cd VM-side
+          python << EOF
+          import sys
+          sys.path.insert(0, '.')
+          from transformer_model.train import train_model
+          
+          epochs = int("${{ github.event.inputs.epochs || '50' }}")
+          print(f"Training for {epochs} epochs...")
+          
+          history = train_model(epochs=epochs, verbose=True)
+          
+          if history:
+              print(f"✅ Training complete!")
+              print(f"   Best epoch: {history['best_epoch'] + 1}")
+              print(f"   Best val loss: {history['best_val_loss']:.6f}")
+          else:
+              print("❌ Training failed")
+              sys.exit(1)
+          EOF
+
+      - name: Evaluate model
+        env:
+          DATABASE_URL: postgresql+psycopg2://traffic_user:supersecretpassword@localhost:5432/traffic_db
+        run: |
+          cd VM-side
+          python << 'EOF'
+          import sys
+          sys.path.insert(0, '.')
+          
+          # Import and run evaluation
+          from Evaluation\ model.evaluate_model import evaluate
+          
+          metrics = evaluate(verbose=True)
+          
+          if metrics:
+              print(f"\n📊 Model Metrics:")
+              print(f"   MAE:   {metrics['mae']:.3f}")
+              print(f"   RMSE:  {metrics['rmse']:.3f}")
+              print(f"   sMAPE: {metrics['smape']:.2f}%")
+          EOF
+
+      - name: Upload model artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: trained-model
+          path: |
+            VM-side/transformer_model/saved_models/
+          retention-days: 30
+
+      - name: Cache trained model
+        uses: actions/cache/save@v4
+        with:
+          path: VM-side/transformer_model/saved_models
+          key: trained-model-${{ github.ref_name }}-${{ github.run_number }}
