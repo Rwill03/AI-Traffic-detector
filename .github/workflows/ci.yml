@@ -214,8 +214,12 @@ jobs:
               build:
                 context: ./VM-side
                 dockerfile: Dockerfile.ci
-              deploy: {}
+              deploy: null
           EOF
+
+      - name: Show merged docker-compose config
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml config
 
       - name: Start services
         run: |
