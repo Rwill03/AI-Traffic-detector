@@ -214,9 +214,7 @@ jobs:
               build:
                 context: ./VM-side
                 dockerfile: Dockerfile.ci
-              deploy:
-                resources:
-                  reservations: {}
+              deploy: {}
           EOF
 
       - name: Start services
