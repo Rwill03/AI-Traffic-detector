@@ -2,7 +2,7 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [main, master, futuristic-dashboard]
+    branches: [main, master, futuristic-dashboard, Staging-Camera-counter]
   pull_request:
     branches: [main, master]
 
