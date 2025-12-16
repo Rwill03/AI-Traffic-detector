@@ -165,21 +165,27 @@ jobs:
           DATABASE_URL: postgresql+psycopg2://traffic_user:supersecretpassword@localhost:5432/traffic_db
         run: |
           cd VM-side
-          python << 'EOF'
+          python -c "
           import sys
+          import os
           sys.path.insert(0, '.')
           
-          # Import and run evaluation
-          from Evaluation\ model.evaluate_model import evaluate
+          # Add Evaluation model directory to path
+          eval_dir = os.path.join(os.getcwd(), 'Evaluation model')
+          sys.path.insert(0, eval_dir)
+          
+          from evaluate_model import evaluate
           
           metrics = evaluate(verbose=True)
           
           if metrics:
-              print(f"\n📊 Model Metrics:")
-              print(f"   MAE:   {metrics['mae']:.3f}")
-              print(f"   RMSE:  {metrics['rmse']:.3f}")
-              print(f"   sMAPE: {metrics['smape']:.2f}%")
-          EOF
+              print('\n📊 Model Metrics:')
+              print(f'   MAE:   {metrics[\"mae\"]:.3f}')
+              print(f'   RMSE:  {metrics[\"rmse\"]:.3f}')
+              print(f'   sMAPE: {metrics[\"smape\"]:.2f}%')
+          else:
+              print('⚠️ Evaluation returned no metrics')
+          "
 
       - name: Upload model artifacts
         uses: actions/upload-artifact@v4
