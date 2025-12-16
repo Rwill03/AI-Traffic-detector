@@ -216,8 +216,7 @@ jobs:
                 dockerfile: Dockerfile.ci
               deploy:
                 resources:
-                  reservations:
-                    devices: []
+                  reservations: {}
           EOF
 
       - name: Start services
