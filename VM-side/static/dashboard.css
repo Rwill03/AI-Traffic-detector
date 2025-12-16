@@ -1,0 +1,793 @@
+:root {
+  --bg-page: #f9fafb;
+  --bg-alt: #f3f4f6;
+  --card-bg: #ffffff;
+  --border: #e5e7eb;
+  --text-main: #111827;
+  --text-muted: #6b7280;
+  --accent: #1f2937;
+  --accent-strong: #111827;
+  --accent-neon: #374151;
+  --ok: #22c55e;
+  --warn: #fbbf24;
+  --danger: #f97373;
+  --radius-xl: 20px;
+  --shadow-soft: 0 12px 30px rgba(17, 24, 39, 0.08);
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  min-height: 100vh;
+  background: var(--bg-page);
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 48px 16px;
+  transition: background 0.5s ease, color 0.4s ease;
+}
+
+body.state-lagging {
+  background: #fff7ed;
+}
+
+body.state-offline {
+  background: #fef2f2;
+}
+
+/* ============================================
+   Frame / Container
+   ============================================ */
+.frame {
+  width: 100%;
+  max-width: 1160px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-soft);
+  padding: 32px;
+  border-radius: 24px;
+  overflow: visible;
+  position: relative;
+}
+
+/* ============================================
+   Header
+   ============================================ */
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.title {
+  font-size: 34px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.title span.logo-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 6px rgba(17, 24, 39, 0.12);
+}
+
+.subtitle {
+  font-size: 15px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+.meta {
+  text-align: right;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.meta span {
+  display: block;
+}
+
+@media (max-width: 880px) {
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .meta {
+    text-align: left;
+  }
+}
+
+/* ============================================
+   Tab Navigation
+   ============================================ */
+.tab-nav {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.tab-btn {
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #ffffff;
+  color: var(--text-muted);
+  font-size: 13px;
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(17,24,39,0.05);
+  transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: #f5f6f7;
+}
+
+.tab-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+  box-shadow: 0 8px 18px rgba(17,24,39,0.15);
+}
+
+.tab-content {
+  display: none;
+  position: relative;
+  z-index: 1;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+/* ============================================
+   Grid Layout
+   ============================================ */
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 1.6fr);
+  gap: 24px;
+}
+
+@media (max-width: 880px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ============================================
+   Cards
+   ============================================ */
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-soft);
+  border-radius: var(--radius-xl);
+  padding: 20px 22px 18px;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.15s ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px rgba(17,24,39,0.08);
+}
+
+.card-inner {
+  position: relative;
+  z-index: 1;
+}
+
+.card-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  gap: 8px;
+}
+
+.card-title {
+  font-size: 16px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-main);
+}
+
+.card-tag {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--accent);
+  background: #f3f4f6;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+}
+
+/* ============================================
+   Observation Table
+   ============================================ */
+.obs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-top: 6px;
+}
+
+.obs-table thead {
+  color: var(--text-muted);
+  letter-spacing: 0;
+  text-transform: none;
+  font-size: 12px;
+}
+
+.obs-table th,
+.obs-table td {
+  padding: 6px 4px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.obs-table th:nth-child(2),
+.obs-table td:nth-child(2) {
+  text-align: right;
+}
+
+.obs-table tbody tr {
+  border-top: 1px solid var(--border);
+}
+
+.obs-table tbody tr:first-child {
+  border-top: none;
+}
+
+.obs-table tbody tr.highlight {
+  background: #f5f6f7;
+}
+
+/* ============================================
+   Vehicle Chips
+   ============================================ */
+.tag-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  font-size: 10px;
+}
+
+.vehicle-chip {
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #f8fafc;
+  color: var(--text-muted);
+}
+
+.vehicle-chip strong {
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+/* ============================================
+   Status Grid
+   ============================================ */
+.status-grid {
+  display: grid;
+  grid-template-columns: minmax(0,1fr);
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.status-block {
+  border-radius: 18px;
+  padding: 10px 11px;
+  border: 1px solid var(--border);
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.status-label {
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.status-main {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+/* ============================================
+   Status Dots
+   ============================================ */
+.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--ok);
+  transition: background 0.2s ease;
+}
+
+.dot.warn {
+  background: var(--warn);
+}
+
+.dot.danger {
+  background: var(--danger);
+}
+
+/* ============================================
+   Pills
+   ============================================ */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #f8fafc;
+}
+
+.pill-key {
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.pill-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+.pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--accent-neon);
+}
+
+/* ============================================
+   Footer
+   ============================================ */
+.footer {
+  margin-top: 14px;
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  position: relative;
+  z-index: 1;
+}
+
+/* ============================================
+   Snapshot Button & Modal
+   ============================================ */
+.snapshot-btn {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #ffffff;
+  color: var(--text-main);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.snapshot-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: #f5f6f7;
+  transform: translateY(-1px);
+}
+
+.snapshot-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.snapshot-overlay.hidden {
+  display: none;
+}
+
+.snapshot-modal {
+  max-width: 90vw;
+  max-height: 90vh;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 20px 40px rgba(17,24,39,0.25);
+  background: #ffffff;
+  padding: 20px;
+}
+
+.snapshot-modal img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+/* ============================================
+   Predictions Tab
+   ============================================ */
+.predictions-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 20px;
+}
+
+@media (max-width: 1000px) {
+  .predictions-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.current-prediction {
+  text-align: center;
+  padding: 24px;
+}
+
+.current-hour-label {
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.current-hour-value {
+  font-size: 72px;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1;
+}
+
+.current-hour-unit {
+  font-size: 18px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* ============================================
+   Rush Indicator
+   ============================================ */
+.rush-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 6px 16px;
+  border-radius: 999px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  background: #f3f4f6;
+  border: 1px solid var(--border);
+  color: var(--text-main);
+}
+
+/* ============================================
+   Chart Container
+   ============================================ */
+.chart-container {
+  position: relative;
+  height: 280px;
+  margin-top: 16px;
+}
+
+/* ============================================
+   Day Selector
+   ============================================ */
+.day-selector {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.day-btn {
+  padding: 8px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(148,163,184,0.4);
+  background: var(--accent);
+  color: #ffffff;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.day-btn:hover {
+  background: #111827;
+  border-color: #111827;
+}
+
+.day-btn.active {
+  background: #111827;
+  border-color: #111827;
+  color: #ffffff;
+}
+
+/* ============================================
+   Summary Stats
+   ============================================ */
+.summary-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.stat-item {
+  background: var(--accent);
+  border-radius: 12px;
+  padding: 12px;
+  border: 1px solid #111827;
+}
+
+.stat-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: #ffffff;
+  margin-bottom: 4px;
+}
+
+.stat-value {
+  font-size: 20px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+/* ============================================
+   Prediction List
+   ============================================ */
+.prediction-list {
+  max-height: 400px;
+  overflow-y: auto;
+  margin-top: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: #ffffff;
+  box-shadow: 0 6px 14px rgba(17,24,39,0.06);
+}
+
+.prediction-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 999px;
+  margin-bottom: 4px;
+  background: rgba(15,23,42,0.4);
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+}
+
+.prediction-item:hover {
+  background: rgba(79,70,229,0.15);
+  border-color: rgba(79,70,229,0.3);
+  transform: translateY(-2px);
+}
+
+.prediction-item.current {
+  background: rgba(34,211,238,0.15);
+  border-color: rgba(34,211,238,0.4);
+}
+
+.prediction-item.rush-hour {
+  border-left: 3px solid var(--accent-strong);
+  background: #f5f6f7;
+}
+
+.prediction-hour {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.prediction-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent-strong);
+}
+
+/* ============================================
+   Model Status
+   ============================================ */
+.model-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 11px;
+  margin-top: 12px;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  color: var(--text-main);
+}
+
+/* ============================================
+   Unit Note
+   ============================================ */
+.unit-note {
+  margin: 8px 0 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* ============================================
+   Evaluation Block
+   ============================================ */
+.eval-block {
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 10px 20px rgba(17,24,39,0.05);
+}
+
+.eval-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.eval-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.eval-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.eval-chip {
+  border-radius: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  background: #f8fafc;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+
+.eval-chip .label {
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
+}
+
+.eval-chip .value {
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+/* ============================================
+   Tooltips
+   ============================================ */
+.has-tip {
+  position: relative;
+  cursor: help;
+}
+
+.has-tip::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 0;
+  bottom: 120%;
+  width: 220px;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-main);
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 18px rgba(17,24,39,0.12);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(4px);
+  transition: all 0.15s ease;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.has-tip:hover::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.eval-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.eval-chart {
+  height: 140px;
+}
+
+/* ============================================
+   Form Elements
+   ============================================ */
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+input, select, button {
+  font-family: inherit;
+}
+
+input, select {
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #ffffff;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+input:focus, select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(14,165,233,0.2);
+}
