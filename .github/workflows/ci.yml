@@ -261,16 +261,30 @@ jobs:
       - name: View logs on failure
         if: failure()
         run: |
-          docker logs traffic_api || true
-          docker logs traffic_db || true
+          if docker ps -a --format '{{"{{.Names}}"}}' | grep -q '^traffic_api$'; then
+            echo "--- logs: traffic_api ---";
+            docker logs traffic_api 2>/dev/null || true;
+          else
+            echo "traffic_api not present";
+          fi
+
+          if docker ps -a --format '{{"{{.Names}}"}}' | grep -q '^traffic_db$'; then
+            echo "--- logs: traffic_db ---";
+            docker logs traffic_db 2>/dev/null || true;
+          else
+            echo "traffic_db not present";
+          fi
 
       - name: Stop services
         if: always()
         run: |
-          docker rm -f traffic_api || true
-          docker rm -f traffic_db || true
-          docker volume rm ai-traffic-detector_model_data || true
-          docker volume rm ai-traffic-detector_traffic_db_data || true
+          # Remove containers if present
+          if docker ps -a --format '{{"{{.Names}}"}}' | grep -q '^traffic_api$'; then docker rm -f traffic_api || true; else echo "traffic_api not found"; fi
+          if docker ps -a --format '{{"{{.Names}}"}}' | grep -q '^traffic_db$'; then docker rm -f traffic_db || true; else echo "traffic_db not found"; fi
+
+          # Remove volumes if they exist
+          if docker volume inspect ai-traffic-detector_model_data >/dev/null 2>&1; then docker volume rm ai-traffic-detector_model_data || true; else echo "model_data volume not found"; fi
+          if docker volume inspect ai-traffic-detector_traffic_db_data >/dev/null 2>&1; then docker volume rm ai-traffic-detector_traffic_db_data || true; else echo "traffic_db_data volume not found"; fi
 
   # ============================================
   # Deploy (manual - requires secrets setup)
