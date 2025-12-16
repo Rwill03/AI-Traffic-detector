@@ -250,7 +250,7 @@ jobs:
   # ============================================
   deploy:
     name: 🚀 Deploy to Server
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: integration-test
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/futuristic-dashboard' || github.ref == 'refs/heads/Staging-Camera-counter')
     
@@ -258,25 +258,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-      - name: Add server to known hosts
+      - name: Deploy locally
         run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
-
-      - name: Deploy to server
-        run: |
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
-            cd ~/AI-Traffic-detector
-            git pull origin ${{ github.ref_name }}
-            docker compose down
-            docker compose up -d --build
-            echo "✅ Deployment complete!"
-          EOF
+          cd ~/AI-Traffic-detector
+          git pull origin ${{ github.ref_name }}
+          docker compose down
+          docker compose up -d --build
+          echo "✅ Deployment complete!"
 
       - name: Deployment summary
         run: |
