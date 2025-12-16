@@ -246,28 +246,20 @@ jobs:
           docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v
 
   # ============================================
-  # Deploy (only on main/master/staging push)
+  # Deploy (manual - requires secrets setup)
   # ============================================
   deploy:
     name: 🚀 Deploy to Server
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     needs: integration-test
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/futuristic-dashboard' || github.ref == 'refs/heads/Staging-Camera-counter')
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Deploy locally
+      - name: Deployment info
         run: |
-          cd ~/AI-Traffic-detector
-          git pull origin ${{ github.ref_name }}
-          docker compose down
-          docker compose up -d --build
-          echo "✅ Deployment complete!"
-
-      - name: Deployment summary
-        run: |
-          echo "🚀 Deployed successfully!"
+          echo "🚀 CI passed! Ready for deployment."
           echo "Branch: ${{ github.ref_name }}"
           echo "Commit: ${{ github.sha }}"
+          echo ""
+          echo "Manual deployment: ssh to server and run:"
+          echo "  cd ~/AI-Traffic-detector && git pull && docker compose up -d --build"
