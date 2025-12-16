@@ -217,34 +217,60 @@ jobs:
               deploy: null
           EOF
 
-      - name: Show merged docker-compose config
+      - name: Start Postgres (docker run)
         run: |
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml config
+          docker run -d --name traffic_db \
+            --health-cmd='pg_isready -U traffic_user' \
+            --health-interval=10s \
+            --health-timeout=5s \
+            --health-retries=5 \
+            -e POSTGRES_DB=traffic_db \
+            -e POSTGRES_USER=traffic_user \
+            -e POSTGRES_PASSWORD=supersecretpassword \
+            -p 5432:5432 \
+            postgres:16
 
-      - name: Start services
+          echo "Waiting for Postgres to become healthy..."
+          for i in $(seq 1 30); do
+            STATUS=$(docker inspect --format '{{.State.Health.Status}}' traffic_db 2>/dev/null || echo unknown)
+            echo "Postgres status: $STATUS"
+            if [ "$STATUS" = "healthy" ]; then echo "Postgres healthy"; break; fi
+            sleep 2
+          done
+
+      - name: Start API (docker run)
         run: |
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build
-          sleep 20
+          docker run -d --name traffic_api \
+            --link traffic_db:db \
+            -e DATABASE_URL=postgresql+psycopg2://traffic_user:supersecretpassword@db:5432/traffic_db \
+            -p 8001:8001 \
+            traffic-api:test
+
+          sleep 8
 
       - name: Check API health
         run: |
-          curl -f http://localhost:8001/api/v1/status || exit 1
-          echo "✅ API health check passed"
+          curl -f http://localhost:8001/api/v1/status || (docker logs traffic_api && exit 1)
+          echo "API health check passed"
 
       - name: Test predictions endpoint
         run: |
-          curl -f http://localhost:8001/api/v1/predictions || exit 1
-          echo "✅ Predictions endpoint works"
+          curl -f http://localhost:8001/api/v1/predictions || (docker logs traffic_api && exit 1)
+          echo "Predictions endpoint works"
 
       - name: View logs on failure
         if: failure()
         run: |
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml logs
+          docker logs traffic_api || true
+          docker logs traffic_db || true
 
       - name: Stop services
         if: always()
         run: |
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml down -v
+          docker rm -f traffic_api || true
+          docker rm -f traffic_db || true
+          docker volume rm ai-traffic-detector_model_data || true
+          docker volume rm ai-traffic-detector_traffic_db_data || true
 
   # ============================================
   # Deploy (manual - requires secrets setup)
