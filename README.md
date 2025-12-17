@@ -653,10 +653,3 @@ act push
 MIT License - Zie [LICENSE](LICENSE) voor details.
 
 ---
-
-## 👥 Contributors
-
-- Edge detection & camera integration
-- Transformer model development
-- Dashboard & API design
-- Dashboard & API design
