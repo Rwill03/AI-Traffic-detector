@@ -650,6 +650,6 @@ act push
 
 ## 📝 Licentie
 
-MIT License - Zie [LICENSE](LICENSE) voor details.
+MIT License
 
 ---
