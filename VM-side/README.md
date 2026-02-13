@@ -1,86 +1,86 @@
 # Traffic Prediction API
 
-Een FastAPI server met een Transformer-gebaseerd machine learning model voor het voorspellen van verkeersintensiteit per uur.
+A FastAPI server with a Transformer-based machine learning model for predicting traffic intensity per hour.
 
 ## 🚀 Quick Start
 
-### Vereisten
+### Requirements
 - Docker & Docker Compose
-- NVIDIA GPU met CUDA support (optioneel, maar aanbevolen)
-- NVIDIA Container Toolkit (voor GPU support)
+- NVIDIA GPU with CUDA support (optional, but recommended)
+- NVIDIA Container Toolkit (for GPU support)
 
-### 1. Project opstarten
+### 1. Starting the project
 
 ```bash
-# Start de containers (API + PostgreSQL database)
+# Start the containers (API + PostgreSQL database)
 docker compose up -d
 
-# Check of alles draait
+# Check if everything is running
 docker compose ps
 ```
 
-De API is nu beschikbaar op `http://localhost:8001`
+The API is now available at `http://localhost:8001`
 
-### 2. Dashboard openen
+### 2. Opening the dashboard
 
-Open je browser en ga naar:
+Open your browser and go to:
 ```
 http://localhost:8001/
 ```
 
-Je ziet twee tabs:
-- **Status**: Live verkeersobservaties
-- **Predictions**: AI-voorspellingen per uur
+You'll see two tabs:
+- **Status**: Live traffic observations
+- **Predictions**: AI predictions per hour
 
 ---
 
 ## 🤖 Model Training
 
-### Stap 1: Database vullen met data
+### Step 1: Filling the database with data
 
-Als de database leeg is, genereer eerst testdata:
+If the database is empty, generate test data first:
 
 ```bash
-# Genereer 7 dagen realistische verkeersdata
+# Generate 7 days of realistic traffic data
 python3 debug/generate_realistic_data.py --days 7
 ```
 
-Of voeg echte observaties toe via de API:
+Or add real observations via the API:
 ```bash
 curl -X POST http://localhost:8001/api/v1/observation \
   -H "Content-Type: application/json" \
   -d '{"ts": "2025-12-10T08:30:00", "car": 45, "truck": 3, "bus": 1}'
 ```
 
-### Stap 2: Model trainen
+### Step 2: Training the model
 
 ```bash
-# Train het model (in de Docker container)
+# Train the model (in the Docker container)
 docker compose exec api python3 -c "
 from transformer_model.train import train_model
 train_model(epochs=100, verbose=True)
 "
 ```
 
-### Validatie & evaluatie
-- Training gebruikt nu altijd een hold-out validatieset (minimaal 24 uur input + 24 uur target, dus minstens 96 uurlijkse punten nodig).
-- Draai validatiemetrics (MAE/RMSE/MAPE) op de opgeslagen `best_model.pth`:
+### Validation & evaluation
+- Training now always uses a hold-out validation set (minimum 24 hours input + 24 hours target, so at least 96 hourly points needed).
+- Run validation metrics (MAE/RMSE/MAPE) on the saved `best_model.pth`:
 ```bash
 docker compose exec api python3 "Evaluation model/evaluate_model.py"
 ```
-- Hoe het werkt:
-  - Data split: laatste 20% uurdata is validatie, met minimaal één volledige sequence van 24u input + 24u target voor zowel train als val.
-  - Metrics: MAE (gemiddelde absolute fout) en RMSE (wortel van kwadratische fout) in echte auto-aantallen; sMAPE als percentage (stabieler bij lage aantallen); per-uur MAE voor inzicht in specifieke uren.
-  - Training: verlies is SmoothL1/Huber (mix van MAE/MSE; dempt uitschieters), optimizer is Adam (adaptieve lr) met weight decay; beste val-loss bewaart `best_model.pth` via early stopping + LR scheduler.
-  - Pipelines: scaler wordt hergebruikt, model wordt geladen uit `best_model.pth` (beste val-loss tijdens training), validatieset wordt door het model gehaald, vervolgens worden metrics berekend en in het dashboard getoond via `/api/v1/model/metrics`.
+- How it works:
+  - Data split: last 20% of hourly data is validation, with at least one full sequence of 24h input + 24h target for both train and val.
+  - Metrics: MAE (mean absolute error) and RMSE (root mean squared error) in real car counts; sMAPE as percentage (more stable with low counts); per-hour MAE for insight into specific hours.
+  - Training: loss is SmoothL1/Huber (mix of MAE/MSE; dampens outliers), optimizer is Adam (adaptive lr) with weight decay; best val-loss saves `best_model.pth` via early stopping + LR scheduler.
+  - Pipelines: scaler is reused, model is loaded from `best_model.pth` (best val-loss during training), validation set is passed through the model, then metrics are calculated and shown in the dashboard via `/api/v1/model/metrics`.
 
-Training parameters kunnen aangepast worden in `transformer_model/config.py`:
-- `epochs`: Aantal training epochs (default: 100)
-- `batch_size`: Batch grootte (default: 4)
+Training parameters can be adjusted in `transformer_model/config.py`:
+- `epochs`: Number of training epochs (default: 100)
+- `batch_size`: Batch size (default: 4)
 - `learning_rate`: Learning rate (default: 0.001)
-- `early_stopping_patience`: Stop na N epochs zonder verbetering (default: 10)
+- `early_stopping_patience`: Stop after N epochs without improvement (default: 10)
 
-### Stap 3: API herstarten om nieuw model te laden
+### Step 3: Restarting the API to load the new model
 
 ```bash
 docker compose restart api
@@ -88,24 +88,24 @@ docker compose restart api
 
 ---
 
-## 📁 Project Structuur
+## 📁 Project Structure
 
 ```
 VM-side/
-├── main.py                    # FastAPI applicatie
+├── main.py                    # FastAPI application
 ├── requirements.txt           # Python dependencies
-├── Dockerfile                 # Container configuratie
+├── Dockerfile                 # Container configuration
 ├── static/
 │   └── dashboard.html         # Web dashboard
 └── transformer_model/
     ├── __init__.py
-    ├── config.py              # Model configuratie
-    ├── model.py               # Transformer architectuur
+    ├── config.py              # Model configuration
+    ├── model.py               # Transformer architecture
     ├── data_preprocessing.py  # Data loading & features
     ├── train.py               # Training script
     ├── predict.py             # Prediction logic
-    └── saved_models/          # Opgeslagen models
-        ├── best_model.pth     # Beste model weights
+    └── saved_models/          # Saved models
+        ├── best_model.pth     # Best model weights
         └── scaler.pkl         # Data scaler
 ```
 
@@ -113,21 +113,21 @@ VM-side/
 
 ## 🔧 API Endpoints
 
-### Status & Observaties
-| Endpoint | Method | Beschrijving |
-|----------|--------|--------------|
+### Status & Observations
+| Endpoint | Method | Description |
+|----------|--------|-------------|
 | `/` | GET | Dashboard HTML |
-| `/api/v1/status` | GET | Server status + laatste observaties |
-| `/api/v1/observation` | POST | Nieuwe observatie toevoegen |
+| `/api/v1/status` | GET | Server status + latest observations |
+| `/api/v1/observation` | POST | Add new observation |
 
 ### Predictions
-| Endpoint | Method | Beschrijving |
-|----------|--------|--------------|
-| `/api/v1/predictions?date=YYYY-MM-DD` | GET | 24-uurs voorspelling voor datum |
-| `/api/v1/predictions/current` | GET | Voorspelling voor huidig uur |
-| `/api/v1/predictions/week` | GET | Voorspellingen voor hele week |
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/predictions?date=YYYY-MM-DD` | GET | 24-hour prediction for date |
+| `/api/v1/predictions/current` | GET | Prediction for current hour |
+| `/api/v1/predictions/week` | GET | Predictions for entire week |
 
-### Voorbeeld Response
+### Example Response
 ```json
 {
   "predictions": [
@@ -148,23 +148,23 @@ VM-side/
 
 ## 🧠 Model Details
 
-### Architectuur
+### Architecture
 - **Type**: Transformer Encoder
 - **Input features**: 4 (car_count, hour, day_of_week, is_weekend)
-- **Output**: 24 uur voorspellingen
+- **Output**: 24 hour predictions
 - **Parameters**: ~267,000
 
 ### Features
-Het model gebruikt temporal features om verschillende patronen te leren:
-- **Uur van de dag**: Rush hour vs nacht
-- **Dag van de week**: Maandag t/m zondag
-- **Weekend indicator**: Weekenden hebben minder verkeer
+The model uses temporal features to learn different patterns:
+- **Hour of day**: Rush hour vs night
+- **Day of week**: Monday through Sunday
+- **Weekend indicator**: Weekends have less traffic
 
-### Typische voorspellingen
-| Dag Type | Rush Hour (7-9u) | Nacht (0-5u) |
-|----------|------------------|--------------|
-| Doordeweeks | 60-70 auto's | 2-5 auto's |
-| Weekend | 30-40 auto's | 2-5 auto's |
+### Typical predictions
+| Day Type | Rush Hour (7-9 AM) | Night (0-5 AM) |
+|----------|-------------------|----------------|
+| Weekday | 60-70 cars | 2-5 cars |
+| Weekend | 30-40 cars | 2-5 cars |
 
 ---
 
@@ -192,21 +192,21 @@ docker compose exec api python3 -c "import torch; print(f'GPU: {torch.cuda.is_av
 
 ---
 
-## 🔄 Hertrainen na nieuwe data
+## 🔄 Retraining after new data
 
-Als er nieuwe observaties zijn toegevoegd:
+If new observations have been added:
 
 ```bash
-# 1. Train het model opnieuw
+# 1. Retrain the model
 docker compose exec api python3 -c "
 from transformer_model.train import train_model
 train_model(epochs=100, verbose=True)
 "
 
-# 2. Herstart de API om het nieuwe model te laden
+# 2. Restart the API to load the new model
 docker compose restart api
 
-# 3. Verifieer dat het model geladen is
+# 3. Verify that the model is loaded
 curl http://localhost:8001/api/v1/predictions/current | jq '.model_ready'
 ```
 
@@ -214,18 +214,18 @@ curl http://localhost:8001/api/v1/predictions/current | jq '.model_ready'
 
 ## ⚠️ Troubleshooting
 
-### Model geeft alleen 0 als voorspelling
-- Controleer of het model getraind is: `ls -la transformer_model/saved_models/`
-- Hertrain het model als `best_model.pth` ontbreekt
+### Model only predicts 0
+- Check if model is trained: `ls -la transformer_model/saved_models/`
+- Retrain the model if `best_model.pth` is missing
 
-### GPU wordt niet gebruikt
+### GPU is not being used
 - Check NVIDIA drivers: `nvidia-smi`
 - Check Docker GPU support: `docker run --rm --gpus all nvidia/cuda:12.1.0-base-ubuntu22.04 nvidia-smi`
 
-### Database connectie error
-- Check of PostgreSQL draait: `docker compose ps`
+### Database connection error
+- Check if PostgreSQL is running: `docker compose ps`
 - Check logs: `docker compose logs db`
 
-### API start niet op
+### API doesn't start
 - Check logs: `docker compose logs api`
 - Rebuild: `docker compose up -d --build`
