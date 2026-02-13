@@ -1,6 +1,6 @@
 # 🚗 AI Traffic Detector
 
-Een real-time verkeersbewakingssysteem dat AI-gestuurde voertuigdetectie combineert met een Transformer-model voor verkeersvoorspellingen.
+A real-time traffic monitoring system that combines AI-driven vehicle detection with a Transformer model for traffic predictions.
 
 ![Architecture](https://img.shields.io/badge/Architecture-Edge%20%2B%20Cloud-blue)
 ![Model](https://img.shields.io/badge/Detection-RF--DETR-green)
@@ -8,39 +8,39 @@ Een real-time verkeersbewakingssysteem dat AI-gestuurde voertuigdetectie combine
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 [![CI/CD](https://github.com/Rwill03/AI-Traffic-detector/actions/workflows/ci.yml/badge.svg)](https://github.com/Rwill03/AI-Traffic-detector/actions/workflows/ci.yml)
 
-## 📋 Inhoudsopgave
+## 📋 Table of Contents
 
-- [Overzicht](#overzicht)
-- [Architectuur](#architectuur)
-- [Componenten](#componenten)
-  - [Rock5 Edge Device](#rock5-edge-device-camera-detectie)
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Components](#components)
+  - [Rock5 Edge Device](#rock5-edge-device-camera-detection)
   - [VM Backend Server](#vm-backend-server)
   - [Transformer Prediction Model](#transformer-prediction-model)
-- [Installatie & Opstarten](#installatie--opstarten)
+- [Installation & Startup](#installation--startup)
 - [API Endpoints](#api-endpoints)
 - [Dashboard Interface](#dashboard-interface)
-- [Model Evaluatie](#model-evaluatie)
+- [Model Evaluation](#model-evaluation)
 - [CI/CD Pipeline](#cicd-pipeline)
 
 ---
 
-## 🎯 Overzicht
+## 🎯 Overview
 
-Dit systeem detecteert en telt voertuigen in real-time via een camera aangesloten op een Rock5 edge device. De data wordt doorgestuurd naar een VM-server met GPU, waar een Transformer-model verkeerspatronen leert en voorspellingen maakt voor de komende 24 uur.
+This system detects and counts vehicles in real-time via a camera connected to a Rock5 edge device. The data is forwarded to a VM server with GPU, where a Transformer model learns traffic patterns and makes predictions for the next 24 hours.
 
 ### Features
 
-- ✅ **Real-time voertuigdetectie** met RF-DETR (COCO dataset)
-- ✅ **Classificatie** per voertuigtype: auto, vrachtwagen, bus, motor, fiets
-- ✅ **24-uurs voorspellingen** met AI Transformer model
-- ✅ **Weekend/weekday bewustzijn** in voorspellingen
-- ✅ **Spitsuur detectie** (7-9u en 16-18u)
-- ✅ **Live dashboard** met monitoring en voorspellingen
-- ✅ **GPU-acceleratie** voor snelle inference
+- ✅ **Real-time vehicle detection** with RF-DETR (COCO dataset)
+- ✅ **Classification** by vehicle type: car, truck, bus, motorcycle, bicycle
+- ✅ **24-hour predictions** with AI Transformer model
+- ✅ **Weekend/weekday awareness** in predictions
+- ✅ **Rush hour detection** (7-9 AM and 4-6 PM)
+- ✅ **Live dashboard** with monitoring and predictions
+- ✅ **GPU acceleration** for fast inference
 
 ---
 
-## 🏗️ Architectuur
+## 🏗️ Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -54,7 +54,7 @@ Dit systeem detecteert en telt voertuigen in real-time via een camera aangeslote
 │                   motorcycle, bicycle                                   ││
 └─────────────────────────────────────────────────────────────────────────┘│
                                                                            │
-                              ▼  HTTP POST (elke 10s)                      │
+│                              ▼  HTTP POST (every 10s)                      │
                                                                            │
 ┌─────────────────────────────────────────────────────────────────────────┐│
 │                           VM SERVER (GPU)                               ││
@@ -65,7 +65,7 @@ Dit systeem detecteert en telt voertuigen in real-time via een camera aangeslote
 │        │                               │  - 24h prediction output    │ ││
 │        ▼                               └─────────────────────────────┘ ││
 │  ┌─────────────┐                                                        ││
-│  │  Dashboard  │  ◀── Real-time updates elke 5s                        ││
+│  │  Dashboard  │  ◀── Real-time updates every 5s                        ││
 │  │  (Web UI)   │                                                        ││
 │  └─────────────┘                                                        ││
 └─────────────────────────────────────────────────────────────────────────┘│
@@ -73,23 +73,23 @@ Dit systeem detecteert en telt voertuigen in real-time via een camera aangeslote
 
 ---
 
-## 📦 Componenten
+## 📦 Components
 
-### Rock5 Edge Device (Camera Detectie)
+### Rock5 Edge Device (Camera Detection)
 
-**Locatie:** `camera_to_server/`
+**Location:** `camera_to_server/`
 
-Het Rock5 board draait een headless Python script dat:
-1. Frames leest van de USB camera (`/dev/video1`)
-2. Elke 10 seconden inference uitvoert met RF-DETR
-3. Voertuigen classificeert en telt
-4. Snapshot + tellingen naar de VM stuurt
+The Rock5 board runs a headless Python script that:
+1. Reads frames from the USB camera (`/dev/video1`)
+2. Performs inference every 10 seconds with RF-DETR
+3. Classifies and counts vehicles
+4. Sends snapshot + counts to the VM
 
 #### RF-DETR Model
 
 - **Model:** RFDETRBase (Real-time Detection Transformer)
-- **Training:** Pre-trained op COCO dataset
-- **Classes gebruikt:**
+- **Training:** Pre-trained on COCO dataset
+- **Classes used:**
   | COCO ID | Label |
   |---------|-------|
   | 2 | bicycle |
@@ -98,7 +98,7 @@ Het Rock5 board draait een headless Python script dat:
   | 6 | bus |
   | 8 | truck |
 
-#### Configuratie
+#### Configuration
 
 ```python
 # camera_to_server/detect_cars_to_server.py
@@ -108,20 +108,20 @@ VM_API_URL = "http://<VM_IP>:8001/api/v1/observations"
 CAMERA_ID = "rock5-camera-1"
 ```
 
-#### Opstarten Rock5
+#### Starting Rock5
 
 ```bash
-# Op de Rock5
+# On the Rock5
 cd ~/AI-Traffic-detector/camera_to_server
 
-# Docker build en run
+# Docker build and run
 docker build -t traffic-camera .
 docker run -d \
   --device=/dev/video1 \
   --name traffic-camera \
   traffic-camera
 
-# Of zonder Docker
+# Or without Docker
 pip install -r requirements.txt
 python detect_cars_to_server.py
 ```
@@ -130,16 +130,16 @@ python detect_cars_to_server.py
 
 ### VM Backend Server
 
-**Locatie:** `VM-side/`
+**Location:** `VM-side/`
 
-De server ontvangt data van de Rock5, slaat het op in PostgreSQL, en serveert de API + dashboard.
+The server receives data from the Rock5, stores it in PostgreSQL, and serves the API + dashboard.
 
 #### Tech Stack
 
 - **Framework:** FastAPI
 - **Database:** PostgreSQL 16
-- **ML:** PyTorch met CUDA support
-- **Container:** Docker met NVIDIA GPU runtime
+- **ML:** PyTorch with CUDA support
+- **Container:** Docker with NVIDIA GPU runtime
 
 #### Database Schema
 
@@ -158,37 +158,37 @@ CREATE TABLE traffic_samples (
 );
 ```
 
-#### Opstarten VM Server
+#### Starting VM Server
 
 ```bash
-# Op de VM
+# On the VM
 cd ~/AI-Traffic-detector
 
-# Start met Docker Compose
+# Start with Docker Compose
 docker compose up -d --build
 
-# Logs bekijken
+# View logs
 docker compose logs -f api
 
-# Interface openen
+# Open interface
 # http://<VM_IP>:8001/
 ```
 
 #### Environment Variables
 
-| Variable | Default | Beschrijving |
-|----------|---------|--------------|
-| `DATABASE_URL` | `postgresql+psycopg2://traffic_user:supersecretpassword@db/traffic_db` | PostgreSQL connectie string |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DATABASE_URL` | `postgresql+psycopg2://traffic_user:supersecretpassword@db/traffic_db` | PostgreSQL connection string |
 
 ---
 
 ### Transformer Prediction Model
 
-**Locatie:** `VM-side/transformer_model/`
+**Location:** `VM-side/transformer_model/`
 
-Een encoder-only Transformer model dat verkeerspatronen leert en voorspellingen maakt.
+An encoder-only Transformer model that learns traffic patterns and makes predictions.
 
-#### Model Architectuur
+#### Model Architecture
 
 ```
 Input (24h) ──▶ Linear Embedding ──▶ Positional Encoding
@@ -231,48 +231,48 @@ TRAIN_CONFIG = {
 
 #### Features
 
-Het model gebruikt 4 input features per tijdstip:
+The model uses 4 input features per time step:
 
-| Feature | Normalisatie | Beschrijving |
-|---------|--------------|--------------|
-| `car` | MinMaxScaler (0-1) | Gemiddeld aantal auto's per snapshot |
-| `hour` | /23 | Uur van de dag (0-23) |
-| `day_of_week` | /6 | Dag van de week (0=ma, 6=zo) |
-| `is_weekend` | 0 of 1 | Weekend indicator |
+| Feature | Normalization | Description |
+|---------|---|---|
+| `car` | MinMaxScaler (0-1) | Average number of cars per snapshot |
+| `hour` | /23 | Hour of day (0-23) |
+| `day_of_week` | /6 | Day of week (0=Mon, 6=Sun) |
+| `is_weekend` | 0 or 1 | Weekend indicator |
 
 #### Training
 
 ```bash
-# In de Docker container
+# In the Docker container
 docker exec -it traffic_api python -c "
 from transformer_model.train import train_model
 train_model(epochs=150, verbose=True)
 "
 
-# Of via Python
+# Or via Python
 cd VM-side
 python -m transformer_model.train
 ```
 
-#### Voorspelling Flow
+#### Prediction Flow
 
-1. **Data ophalen:** Laatste 24 uur uit database
-2. **Aggregatie:** Gemiddelde per uur (mean, niet sum)
-3. **Features:** Temporal features toevoegen
-4. **Normalisatie:** MinMaxScaler met 99e percentiel clipping
+1. **Fetch data:** Last 24 hours from database
+2. **Aggregation:** Average per hour (mean, not sum)
+3. **Features:** Add temporal features
+4. **Normalization:** MinMaxScaler with 99th percentile clipping
 5. **Inference:** Transformer forward pass
-6. **Denormalisatie:** Inverse transform
-7. **Post-processing:** Dag-specifieke correctie
+6. **Denormalization:** Inverse transform
+7. **Post-processing:** Day-specific correction
 
 ---
 
-## 🚀 Installatie & Opstarten
+## 🚀 Installation & Startup
 
-### Vereisten
+### Requirements
 
 - Docker & Docker Compose
-- NVIDIA GPU met CUDA 12.1+ (voor VM)
-- Rock5 board met USB camera
+- NVIDIA GPU with CUDA 12.1+ (for VM)
+- Rock5 board with USB camera
 
 ### Quick Start
 
@@ -284,7 +284,7 @@ cd AI-Traffic-detector
 # Start VM server
 docker compose up -d --build
 
-# Wacht tot database klaar is
+# Wait until database is ready
 sleep 10
 
 # Check status
@@ -294,12 +294,12 @@ docker compose ps
 xdg-open http://localhost:8001/
 ```
 
-### Volledige Setup
+### Full Setup
 
 #### 1. VM Server
 
 ```bash
-# Op de VM
+# On the VM
 cd AI-Traffic-detector
 docker compose up -d --build
 ```
@@ -307,23 +307,23 @@ docker compose up -d --build
 #### 2. Rock5 Camera
 
 ```bash
-# Op de Rock5
+# On the Rock5
 cd AI-Traffic-detector/camera_to_server
 
-# Edit VM IP adres
+# Edit VM IP address
 nano detect_cars_to_server.py
-# Wijzig: VM_API_URL = "http://<VM_IP>:8001/api/v1/observations"
+# Change: VM_API_URL = "http://<VM_IP>:8001/api/v1/observations"
 
 # Start
 docker build -t traffic-camera .
 docker run -d --device=/dev/video1 --restart=unless-stopped traffic-camera
 ```
 
-#### 3. Model Trainen
+#### 3. Model Training
 
 ```bash
-# Verzamel eerst data (minimaal 48+ uur)
-# Train het model
+# Collect data first (minimum 48+ hours)
+# Train the model
 docker exec traffic_api python -c "
 from transformer_model.train import train_model
 train_model()
@@ -339,7 +339,7 @@ train_model()
 ### Status & Monitoring
 
 #### `GET /api/v1/status`
-Haal systeem status en laatste observaties op.
+Fetch system status and latest observations.
 
 **Response:**
 ```json
@@ -369,11 +369,11 @@ Haal systeem status en laatste observaties op.
 ### Observations
 
 #### `POST /api/v1/observations`
-Ontvang nieuwe observatie van camera (multipart/form-data).
+Receive new observation from camera (multipart/form-data).
 
 **Form Fields:**
-- `payload` (string, JSON): Observatie data
-- `snapshot` (file, optional): JPEG/PNG afbeelding
+- `payload` (string, JSON): Observation data
+- `snapshot` (file, optional): JPEG/PNG image
 
 **Payload JSON:**
 ```json
@@ -392,7 +392,7 @@ Ontvang nieuwe observatie van camera (multipart/form-data).
 ```
 
 #### `POST /api/v1/observation`
-Simplified endpoint voor debug/testing.
+Simplified endpoint for debug/testing.
 
 **Body (JSON):**
 ```json
@@ -408,10 +408,10 @@ Simplified endpoint voor debug/testing.
 ### Predictions
 
 #### `GET /api/v1/predictions`
-Haal voorspellingen op voor vandaag of specifieke datum.
+Fetch predictions for today or specific date.
 
 **Query Parameters:**
-- `date` (optional): Datum in `YYYY-MM-DD` formaat
+- `date` (optional): Date in `YYYY-MM-DD` format
 
 **Response:**
 ```json
@@ -444,15 +444,15 @@ Haal voorspellingen op voor vandaag of specifieke datum.
 ```
 
 #### `GET /api/v1/predictions/current`
-Voorspelling voor het huidige uur.
+Prediction for the current hour.
 
 #### `GET /api/v1/predictions/week`
-Voorspellingen voor de komende 7 dagen.
+Predictions for the next 7 days.
 
 ### Model Metrics
 
 #### `GET /api/v1/model/metrics`
-Validatie metrics van het model.
+Model validation metrics.
 
 **Response:**
 ```json
@@ -475,72 +475,72 @@ Validatie metrics van het model.
 
 ### Monitoring Tab
 
-- **Last 10 Observations:** Recente tellingen met snapshot preview
+- **Last 10 Observations:** Recent counts with snapshot preview
 - **System Status:**
   - Rock5 camera pipeline status (online/lagging/offline)
   - FastAPI service status
   - Database status
-  - Sample age in seconden
+  - Sample age in seconds
 
 ### Predictions Tab
 
-- **Traffic Forecast Chart:** Bar chart met 24-uurs voorspellingen
-- **Day Selector:** Kies datum (vandaag + 6 dagen vooruit)
-- **Current Hour:** Live voorspelling voor dit uur
-- **Summary Stats:** Piek uur, daggemiddelde, spitsuur gemiddelde
-- **Model Evaluation:** MAE, RMSE, sMAPE metrics met per-uur breakdown
+- **Traffic Forecast Chart:** Bar chart with 24-hour predictions
+- **Day Selector:** Select date (today + 6 days ahead)
+- **Current Hour:** Live prediction for this hour
+- **Summary Stats:** Peak hour, daily average, rush hour average
+- **Model Evaluation:** MAE, RMSE, sMAPE metrics with per-hour breakdown
 
 ---
 
-## 📈 Model Evaluatie
+## 📈 Model Evaluation
 
-### Metrics Uitleg
+### Metrics Explanation
 
-| Metric | Betekenis | Goed als |
-|--------|-----------|----------|
-| **MAE** | Mean Absolute Error - gemiddelde absolute afwijking | < 5 |
-| **RMSE** | Root Mean Squared Error - straft uitschieters zwaarder | < 8 |
-| **sMAPE** | Symmetric MAPE - schaal-invariant percentage | < 25% |
+| Metric | Meaning | Good if |
+|--------|---------|--------|
+| **MAE** | Mean Absolute Error - average absolute deviation | < 5 |
+| **RMSE** | Root Mean Squared Error - penalizes outliers harder | < 8 |
+| **sMAPE** | Symmetric MAPE - scale-invariant percentage | < 25% |
 
-### Huidige Prestaties
+### Current Performance
 
 ```
-Overall MAE: ~2.1 auto's per uur
-Spitsuur nauwkeurigheid: ±1-3 auto's
-Weekend vs Weekday: Correct onderscheid ✓
+Overall MAE: ~2.1 cars per hour
+Rush hour accuracy: ±1-3 cars
+Weekend vs Weekday: Correct distinction ✓
 ```
 
-### Per Dag van de Week
+### Per Day of Week
 
-| Dag | MAE | Status |
+| Day | MAE | Status |
 |-----|-----|--------|
-| Maandag | ~1.1 | ✅ Uitstekend |
-| Dinsdag | ~1.1 | ✅ Uitstekend |
-| Woensdag | ~1.0 | ✅ Uitstekend |
-| Donderdag | ~1.2 | ✅ Uitstekend |
-| Vrijdag | ~6.5 | ⚠️ Matig |
-| Zaterdag | ~0.4 | ✅ Uitstekend |
-| Zondag | ~0.4 | ✅ Uitstekend |
+| Monday | ~1.1 | ✅ Excellent |
+| Tuesday | ~1.1 | ✅ Excellent |
+| Wednesday | ~1.0 | ✅ Excellent |
+| Thursday | ~1.2 | ✅ Excellent |
+| Friday | ~6.5 | ⚠️ Fair |
+| Saturday | ~0.4 | ✅ Excellent |
+| Sunday | ~0.4 | ✅ Excellent |
 
 ---
 
-## 📁 Project Structuur
+## 📁 Project Structure
 
 ```
 AI-Traffic-detector/
-├── README.md                    # Deze file
+├── README.md                    # This file
 ├── docker-compose.yml           # VM orchestration
 │
 ├── camera_to_server/            # Rock5 edge code
 │   ├── Dockerfile
 │   ├── requirements.txt
-│   ├── detect_cars_to_server.py # Hoofdscript met RF-DETR
+│   ├── detect_cars_to_server.py # Main script with RF-DETR
 │   └── readme.md
 │
 ├── VM-side/                     # Server code
 │   ├── Dockerfile
 │   ├── requirements.txt
-│   ├── main.py                  # FastAPI applicatie
+│   ├── main.py                  # FastAPI application
 │   ├── static/
 │   │   ├── dashboard.html       # Dashboard UI
 │   │   ├── dashboard.css        # Styles
@@ -548,13 +548,13 @@ AI-Traffic-detector/
 │   └── transformer_model/
 │       ├── __init__.py
 │       ├── config.py            # Hyperparameters
-│       ├── model.py             # Transformer architectuur
+│       ├── model.py             # Transformer architecture
 │       ├── data_preprocessing.py # Data pipeline
 │       ├── train.py             # Training script
 │       └── predict.py           # Inference
 │
 ├── Evaluation model/
-│   └── evaluate_model.py        # Standalone evaluatie
+│   └── evaluate_model.py        # Standalone evaluation
 │
 └── debug/
     └── generate_realistic_data.py # Test data generator
@@ -564,7 +564,7 @@ AI-Traffic-detector/
 
 ## 🔧 Troubleshooting
 
-### Camera niet gevonden
+### Camera not found
 ```bash
 # Check devices
 ls -la /dev/video*
@@ -573,9 +573,9 @@ ls -la /dev/video*
 ffmpeg -f v4l2 -i /dev/video1 -frames:v 1 test.jpg
 ```
 
-### Model niet getraind
+### Model not trained
 ```bash
-# Check of er genoeg data is (minimaal 48 uur)
+# Check if there's enough data (minimum 48 hours)
 docker exec traffic_api python -c "
 from transformer_model.data_preprocessing import load_data_from_db
 df = load_data_from_db()
@@ -583,7 +583,7 @@ print(f'Samples: {len(df)}')
 "
 ```
 
-### GPU niet beschikbaar
+### GPU not available
 ```bash
 # Check NVIDIA driver
 nvidia-smi
@@ -600,55 +600,55 @@ print(f'Device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else
 
 ## � CI/CD Pipeline
 
-Dit project gebruikt GitHub Actions voor automatische testing en deployment.
+Dit project uses GitHub Actions for automated testing and deployment.
 
 ### Workflows
 
 #### 1. CI/CD Pipeline (`ci.yml`)
 
-Wordt automatisch uitgevoerd bij elke push en pull request.
+Runs automatically on every push and pull request.
 
-| Stage | Beschrijving |
-|-------|--------------|
-| 🔍 **Lint** | Code quality checks met flake8 en black |
-| 🧪 **Test API** | FastAPI imports, model architectuur tests |
-| 📷 **Test Camera** | Syntax check van camera script |
-| 🐳 **Build Docker** | Build beide Docker images |
+| Stage | Description |
+|-------|-------------|
+| 🔍 **Lint** | Code quality checks with flake8 and black |
+| 🧪 **Test API** | FastAPI imports, model architecture tests |
+| 📷 **Test Camera** | Syntax check of camera script |
+| 🐳 **Build Docker** | Build both Docker images |
 | 🔗 **Integration** | Start docker-compose, test endpoints |
-| 🚀 **Deploy** | Deploy naar server (na merge naar main) |
+| 🚀 **Deploy** | Deploy to server (after merge to main) |
 
 #### 2. Model Training (`train.yml`)
 
-Handmatig te starten of wekelijks (zondag 2:00 UTC).
+Manually triggered or weekly (Sunday 2:00 UTC).
 
 ```bash
-# Handmatig starten via GitHub UI:
+# Manually start via GitHub UI:
 # Actions → Model Training & Evaluation → Run workflow
 ```
 
-### Deployment Configureren
+### Configure Deployment
 
-Om automatische deployment in te schakelen, voeg deze secrets toe in GitHub:
+To enable automatic deployment, add these secrets in GitHub:
 
-1. Ga naar **Settings** → **Secrets and variables** → **Actions**
-2. Voeg toe:
-   - `SSH_PRIVATE_KEY`: SSH private key voor server toegang
-   - `SERVER_HOST`: Server IP (bijv. `100.89.11.82`)
-   - `SERVER_USER`: SSH gebruiker (bijv. `root`)
+1. Go to **Settings** → **Secrets and variables** → **Actions**
+2. Add:
+   - `SSH_PRIVATE_KEY`: SSH private key for server access
+   - `SERVER_HOST`: Server IP (e.g., `100.89.11.82`)
+   - `SERVER_USER`: SSH user (e.g., `root`)
 
-### Lokaal Testen
+### Local Testing
 
 ```bash
-# Install act voor lokale GitHub Actions testing
+# Install act for local GitHub Actions testing
 # https://github.com/nektos/act
 
-# Run CI lokaal
+# Run CI locally
 act push
 ```
 
 ---
 
-## 📝 Licentie
+## 📝 License
 
 MIT License
 
