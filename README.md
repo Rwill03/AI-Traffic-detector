@@ -600,7 +600,7 @@ print(f'Device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else
 
 ## � CI/CD Pipeline
 
-Dit project uses GitHub Actions for automated testing and deployment.
+This project uses GitHub Actions for automated testing and deployment.
 
 ### Workflows
 
